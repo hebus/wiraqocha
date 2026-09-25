@@ -29,6 +29,21 @@ export class DiceTrayView {
       slot.position.set(x, 0);
 
       const used = state.dice.used[i];
+      const tools: Container[] = [];
+      if (!used) {
+        tools.push(new Button({ label: '−', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', disabled: !canAdjust || v <= 1, onClick: () => this.dispatch({ type: 'ADJUST_DIE', index: i, delta: -1 }) }));
+        tools.push(new Button({ label: '+', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', disabled: !canAdjust, onClick: () => this.dispatch({ type: 'ADJUST_DIE', index: i, delta: 1 }) }));
+        if (canReroll) tools.push(new Button({ label: '↻', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', onClick: () => this.dispatch({ type: 'REROLL_DIE', index: i }) }));
+        if (canExoskeleton) tools.push(new Button({ label: '⚙5', width: TOOL_SIZE + 8, height: TOOL_SIZE, fontSize: 10, variant: 'ghost', onClick: () => this.dispatch({ type: 'USE_BATTLE_EXOSKELETON', dieIndex: i }) }));
+      }
+
+      // The tools row can be wider than the die itself (up to 4 buttons) — size the slot to
+      // whichever is wider so neighboring dice's tool rows never overlap.
+      let toolsWidth = 0;
+      for (const t of tools) toolsWidth += t.getLocalBounds().width + 3;
+      if (tools.length) toolsWidth -= 3;
+      const slotWidth = Math.max(DIE_SIZE, toolsWidth);
+
       const die = new Button({
         label: String(v),
         width: DIE_SIZE,
@@ -38,28 +53,18 @@ export class DiceTrayView {
         disabled: used,
         onClick: () => this.dispatch({ type: 'SELECT_DIE', index: i }),
       });
+      die.position.set((slotWidth - DIE_SIZE) / 2, 0);
       slot.addChild(die);
 
-      if (!used) {
-        const tools: Container[] = [];
-        tools.push(new Button({ label: '−', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', disabled: !canAdjust || v <= 1, onClick: () => this.dispatch({ type: 'ADJUST_DIE', index: i, delta: -1 }) }));
-        tools.push(new Button({ label: '+', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', disabled: !canAdjust, onClick: () => this.dispatch({ type: 'ADJUST_DIE', index: i, delta: 1 }) }));
-        if (canReroll) tools.push(new Button({ label: '↻', width: TOOL_SIZE, height: TOOL_SIZE, fontSize: 12, variant: 'ghost', onClick: () => this.dispatch({ type: 'REROLL_DIE', index: i }) }));
-        if (canExoskeleton) tools.push(new Button({ label: '⚙5', width: TOOL_SIZE + 8, height: TOOL_SIZE, fontSize: 10, variant: 'ghost', onClick: () => this.dispatch({ type: 'USE_BATTLE_EXOSKELETON', dieIndex: i }) }));
-
-        let toolsWidth = 0;
-        for (const t of tools) toolsWidth += t.getLocalBounds().width + 3;
-        toolsWidth -= 3;
-        let toolX = (DIE_SIZE - toolsWidth) / 2;
-        for (const t of tools) {
-          t.position.set(toolX, DIE_SIZE + 6);
-          toolX += t.getLocalBounds().width + 3;
-          slot.addChild(t);
-        }
+      let toolX = (slotWidth - toolsWidth) / 2;
+      for (const t of tools) {
+        t.position.set(toolX, DIE_SIZE + 6);
+        toolX += t.getLocalBounds().width + 3;
+        slot.addChild(t);
       }
 
       this.container.addChild(slot);
-      x += DIE_SIZE + GAP;
+      x += slotWidth + GAP;
     });
   }
 }

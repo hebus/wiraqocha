@@ -9,7 +9,7 @@ import { COLOR, FONT_SERIF, PLAYER_COLOR, body } from './theme';
 const TEXT_SHADOW: TextDropShadow = { color: 0x000000, blur: 3, distance: 1, angle: Math.PI / 2, alpha: 0.9 };
 
 export const TOPBAR_HEIGHT = 66;
-export const PLAYER_STRIP_HEIGHT = 46;
+export const PLAYER_STRIP_HEIGHT = 68;
 export const HUD_HEIGHT = TOPBAR_HEIGHT + PLAYER_STRIP_HEIGHT;
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
@@ -110,14 +110,30 @@ export class HudView {
     const leviathanGoal = leviathanThreshold(state.players.length);
 
     this.playerStrip.removeChildren();
-    let x = 24;
     const y = TOPBAR_HEIGHT + 10;
-    for (const p of state.players) {
+    const buildCard = (p: (typeof state.players)[number]) => {
       const lev = leviathanProgress(p);
-      const card = this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length);
+      return this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length);
+    };
+
+    // Players 1-2 grow inward from the left edge (under the action panel column); with 3-4
+    // players, 3-4 grow inward from the right edge (under the journal column) instead of
+    // continuing rightward into the board, which is what pushed them over it before.
+    let x = 24;
+    for (const p of state.players.slice(0, 2)) {
+      const card = buildCard(p);
       card.position.set(x, y);
       this.playerStrip.addChild(card);
       x += card.getLocalBounds().width + 8;
+    }
+
+    let rx = this.width - 24;
+    for (const p of [...state.players.slice(2)].reverse()) {
+      const card = buildCard(p);
+      rx -= card.getLocalBounds().width;
+      card.position.set(rx, y);
+      this.playerStrip.addChild(card);
+      rx -= 8;
     }
 
     if (state.phase === 'preparation') {
@@ -150,18 +166,30 @@ export class HudView {
   ): Container {
     const c = new Container();
     const color = PLAYER_COLOR[id] ?? 0xffffff;
-    const label = new Text({
-      text: `${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}   🏛 ${lev.resources}/${leviathanGoal.resources}·${lev.somnium}/${leviathanGoal.somnium}   ☠ ${artifacts}/4`,
-      style: { ...body, fontSize: 11 },
+    const cardHeight = PLAYER_STRIP_HEIGHT - 8;
+
+    // Split across two lines at full size, rather than one long line shrunk down to fit — a
+    // single-line card was wide enough that a second or fourth player's card could spill out over
+    // the board.
+    const line1 = new Text({
+      text: `${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}`,
+      style: { ...body, fontSize: 13 },
     });
-    label.position.set(20, 8);
+    line1.position.set(20, 7);
+    const line2 = new Text({
+      text: `🏛 ${lev.resources}/${leviathanGoal.resources}·${lev.somnium}/${leviathanGoal.somnium}   ☠ ${artifacts}/4`,
+      style: { ...body, fontSize: 13 },
+    });
+    line2.position.set(20, 7 + line1.height + 2);
+
+    const width = Math.max(line1.width, line2.width) + 32;
     const bg = new Graphics();
-    bg.roundRect(0, 0, label.width + 32, PLAYER_STRIP_HEIGHT - 8, 8)
+    bg.roundRect(0, 0, width, cardHeight, 8)
       .fill({ color: COLOR.panelBg, alpha: 0.9 })
       .stroke({ width: 1, color });
     const dot = new Graphics();
-    dot.circle(11, (PLAYER_STRIP_HEIGHT - 8) / 2, 4).fill({ color });
-    c.addChild(bg, dot, label);
+    dot.circle(11, cardHeight / 2, 4).fill({ color });
+    c.addChild(bg, dot, line1, line2);
     return c;
   }
 }
