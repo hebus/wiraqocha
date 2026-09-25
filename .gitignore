@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Official rulebook — copyrighted material, kept local only.
+bgg74393.pdf
+bgg74393.txt
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
