@@ -8,6 +8,7 @@ import { BoardView } from '../pixi/BoardView';
 import { DiceTrayView } from '../pixi/DiceTrayView';
 import { ActionPanelView, type InteractionMode } from '../pixi/ActionPanelView';
 import { LogPanelView } from '../pixi/LogPanelView';
+import { Panel } from '../pixi/ui/Panel';
 import { COLOR, hint as hintStyle } from '../pixi/theme';
 
 const HINTS: Record<InteractionMode, string> = {
@@ -29,6 +30,8 @@ const AI_TICK_DELAY_JITTER_MS = 200;
 const GAP = 12;
 const SIDE_PANEL_WIDTH = 340;
 const LOG_PANEL_WIDTH = 260;
+const JOURNAL_HEIGHT = 300;
+const DICE_BOX_PADDING = 16;
 
 /** Top-level game screen: composes Hud/Board/DiceTray/ActionPanel/LogPanel, owns the interaction mode and the AI turn scheduler. */
 export class GameScene {
@@ -40,6 +43,7 @@ export class GameScene {
   private diceTray: DiceTrayView;
   private actionPanel: ActionPanelView;
   private logPanel: LogPanelView;
+  private diceBox: Panel;
   private aiBanner: Text;
   private hintText: Text;
 
@@ -69,6 +73,11 @@ export class GameScene {
     }, this.overlayLayer);
     this.logPanel = new LogPanelView();
 
+    // The journal only ever shows a handful of lines (the engine caps it at 16), so it doesn't
+    // need the side column's full height — the dice tray and turn button live in the space below it.
+    this.diceBox = new Panel({ width: 1, height: 1 });
+    this.diceBox.addChild(this.diceTray.container, this.hud.actionContainer);
+
     this.aiBanner = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 12, fill: COLOR.cyan } });
     this.aiBanner.anchor.set(0.5, 0);
     this.hintText = new Text({ text: '', style: { ...hintStyle, wordWrap: false, align: 'center' } });
@@ -78,12 +87,11 @@ export class GameScene {
     this.container.addChild(
       this.board.container,
       this.hud.topContainer,
-      this.diceTray.container,
       this.actionPanel.container,
       this.logPanel.container,
+      this.diceBox,
       this.aiBanner,
       this.hintText,
-      this.hud.actionContainer,
       this.overlayLayer,
     );
 
@@ -111,8 +119,16 @@ export class GameScene {
     const sideHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2);
     this.actionPanel.container.position.set(GAP, sideY);
     this.actionPanel.layout(SIDE_PANEL_WIDTH, sideHeight);
-    this.logPanel.container.position.set(width - LOG_PANEL_WIDTH - GAP, sideY);
-    this.logPanel.layout(LOG_PANEL_WIDTH, sideHeight);
+
+    const rightX = width - LOG_PANEL_WIDTH - GAP;
+    const journalHeight = Math.min(JOURNAL_HEIGHT, sideHeight * 0.6);
+    this.logPanel.container.position.set(rightX, sideY);
+    this.logPanel.layout(LOG_PANEL_WIDTH, journalHeight);
+
+    const diceBoxY = sideY + journalHeight + GAP;
+    const diceBoxHeight = Math.max(120, sideHeight - journalHeight - GAP);
+    this.diceBox.position.set(rightX, diceBoxY);
+    this.diceBox.resize(LOG_PANEL_WIDTH, diceBoxHeight);
 
     this.renderAll();
   }
@@ -244,19 +260,16 @@ export class GameScene {
     const insetRight = LOG_PANEL_WIDTH + GAP * 2;
     const centerX = insetLeft + (this.screenWidth - insetLeft - insetRight) / 2;
     this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
+    this.hintText.position.set(centerX, this.screenHeight - 24 - (this.hintText.height || 16));
 
-    const margin = 24;
-    const hintHeight = this.hintText.height || 16;
-    this.hintText.position.set(centerX, this.screenHeight - margin - hintHeight);
+    // Dice tray + turn button, stacked in the box below the journal.
+    const innerWidth = this.diceBox.panelWidth - DICE_BOX_PADDING * 2;
+    const diceWidth = this.diceTray.container.getLocalBounds().width;
+    this.diceTray.container.position.set(DICE_BOX_PADDING + Math.max(0, (innerWidth - diceWidth) / 2), DICE_BOX_PADDING);
+    const diceHeight = this.diceTray.container.getLocalBounds().height || 48;
 
     const actionBtnWidth = this.hud.actionContainer.getLocalBounds().width;
-    const actionBtnHeight = this.hud.actionContainer.getLocalBounds().height || 48;
-    const actionY = this.hintText.y - 12 - actionBtnHeight;
-    this.hud.actionContainer.position.set(centerX - actionBtnWidth / 2, actionY);
-
-    const diceWidth = this.diceTray.container.getLocalBounds().width;
-    const diceHeight = this.diceTray.container.getLocalBounds().height || 48;
-    this.diceTray.container.position.set(centerX - diceWidth / 2, actionY - 14 - diceHeight);
+    this.hud.actionContainer.position.set(DICE_BOX_PADDING + Math.max(0, (innerWidth - actionBtnWidth) / 2), DICE_BOX_PADDING + diceHeight + 16);
   }
 
   destroy() {
