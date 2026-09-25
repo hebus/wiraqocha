@@ -133,3 +133,24 @@ export const TECHNOLOGIES: TechCardDef[] = [
 ];
 
 export const technologyById = new Map(TECHNOLOGIES.map((t) => [t.id, t]));
+
+/**
+ * A rough, hand-tuned "how good is this card" weight — used by the AI to prioritize which
+ * Technology to build, and by the engine to pick which of a pillaged player's several Inventions
+ * gets stolen (the most valuable one to the *victim*, since neither a human nor the AI can target
+ * a specific card through the CONQUER/pillage action, only the 'invention' category).
+ */
+export const TECH_UTILITY: Record<TechCardId, number> = {
+  'android-factory': 18,
+  'flying-fortress': 15,
+  'force-field': 15,
+  'recovery-workshop': 14,
+  'battle-exoskeleton': 12,
+  'death-ray': 10,
+  juggernaut: 20,
+  'android-explorer': 20,
+  'mechanical-miner': 20,
+  'production-tanks': 16,
+  'psychic-probe': 10,
+  'transport-tunneller': 17,
+};

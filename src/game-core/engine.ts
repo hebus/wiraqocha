@@ -1,20 +1,14 @@
 import type {
   GameAction, GameState, PawnState, PawnType, PlayerId, PlayerState, StealTarget, TileState,
 } from './types';
-import { TECHNOLOGIES, technologyById, type TechCardId } from '../game-data/technologies';
+import { TECHNOLOGIES, TECH_UTILITY, technologyById, type TechCardId } from '../game-data/technologies';
+import {
+  EXPLORER_LIKE, FORAGE_LIKE, ZEPPELIN_LIKE, baseCampNeedsPlacement, baseDefenseValue,
+  conquestSatisfied, describeAttempt, effectiveDefenses, hasActiveTech, leviathanProgress,
+  leviathanThreshold, ownsAdjacentTile, resolveDiceAttempt, somniumVictoryThreshold,
+} from './rules';
 
 const ALL_PLAYER_IDS: PlayerId[] = ['albion', 'helios', 'meridian', 'valhalla'];
-
-const ZEPPELIN_LIKE: PawnType[] = ['zeppelin', 'juggernaut'];
-const FORAGE_LIKE: PawnType[] = ['drilling', 'mechanical-miner'];
-const EXPLORER_LIKE: PawnType[] = ['explorer', 'android-explorer'];
-
-// Axial neighbor directions — adjacency is orientation-independent (flat-top / pointy-top
-// only change the pixel projection, not which (q, r) pairs are neighbors).
-const AXIAL_DIRS = [
-  { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
-  { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 },
-];
 
 function rollDie() { return Math.floor(Math.random() * 6) + 1; }
 
@@ -57,23 +51,6 @@ export class GameEngine {
   private player() { return this.state.players.find(p => p.id === this.state.activePlayerId)!; }
   private log(message: string) { this.state.log = [message, ...this.state.log].slice(0, 16); }
 
-  private baseCampNeedsPlacement(player: PlayerState) {
-    const camp = this.state.pawns.find(p => p.ownerId === player.id && p.type === 'base-camp');
-    return !camp || camp.tileId === 'reserve';
-  }
-
-  private hasActiveTech(player: PlayerState, id: TechCardId) {
-    return player.technologies.includes(id) && (player.techBuiltTurn[id] ?? 0) < this.state.turn;
-  }
-
-  private isAdjacent(a: { q: number; r: number }, b: { q: number; r: number }) {
-    return AXIAL_DIRS.some(d => a.q + d.q === b.q && a.r + d.r === b.r);
-  }
-
-  private ownsAdjacentTile(tile: TileState, playerId: PlayerId) {
-    return this.state.tiles.some(t => t.ownerId === playerId && t.id !== tile.id && this.isAdjacent(tile, t));
-  }
-
   // ---------------------------------------------------------------- Phase 1
 
   private rollDice() {
@@ -90,10 +67,12 @@ export class GameEngine {
     this.state.dice = { values: Array.from({ length: count }, rollDie), used: Array(count).fill(false) };
     this.state.selectedDice = [];
 
-    // Phase 1: resource harvest — granted regardless of Camp de Base status.
+    // Phase 1: resource harvest — granted regardless of Camp de Base status. Storage is only
+    // capped back down to 3 at the end of the turn (endTurn), so a turn can temporarily exceed it
+    // (e.g. to afford a 4-cost Technology) between harvest and the turn's end.
     const baseResources = this.state.tiles.filter(t => t.ownerId === player.id).reduce((s, t) => s + t.resources, 0);
-    const productionTanksBonus = this.hasActiveTech(player, 'production-tanks') ? 2 : 0;
-    player.resources = Math.min(3, player.resources + baseResources + productionTanksBonus);
+    const productionTanksBonus = hasActiveTech(this.state, player, 'production-tanks') ? 2 : 0;
+    player.resources += baseResources + productionTanksBonus;
 
     const ruinsCapacity = this.state.tiles.filter(t => t.ownerId === player.id && t.terrain === 'ruins' && t.pawnId).length;
     this.state.turnUsed = {
@@ -146,7 +125,7 @@ export class GameEngine {
   private useRecoveryWorkshop(pawnId: string) {
     const player = this.player();
     if (this.state.phase !== 'preparation') return;
-    if (!this.hasActiveTech(player, 'recovery-workshop')) return;
+    if (!hasActiveTech(this.state, player, 'recovery-workshop')) return;
     if (this.state.turnUsed.recoveryWorkshop) return;
     const pawn = this.state.pawns.find(p => p.id === pawnId && p.ownerId === player.id && p.tileId === 'cemetery' && !p.removed);
     if (!pawn) return;
@@ -211,7 +190,7 @@ export class GameEngine {
   private useBattleExoskeleton(dieIndex: number) {
     const player = this.player();
     if (this.state.phase !== 'actions') return;
-    if (!this.hasActiveTech(player, 'battle-exoskeleton')) return;
+    if (!hasActiveTech(this.state, player, 'battle-exoskeleton')) return;
     if (this.state.turnUsed.battleExoskeleton) { this.log('Exosquelette déjà utilisé ce tour.'); return; }
     if (this.state.dice.used[dieIndex]) return;
     this.state.dice.values[dieIndex] = 5;
@@ -224,7 +203,7 @@ export class GameEngine {
   private placeDefense(tileId: string, dieIndex: number) {
     const player = this.player();
     if (this.state.phase !== 'actions') return;
-    if (this.baseCampNeedsPlacement(player)) { this.log('Vous devez d\'abord replacer votre Camp de Base.'); return; }
+    if (baseCampNeedsPlacement(this.state, player)) { this.log('Vous devez d\'abord replacer votre Camp de Base.'); return; }
     const tile = this.state.tiles.find(t => t.id === tileId);
     if (!tile || tile.ownerId !== player.id) { this.log('Vous ne pouvez placer un dé de défense que sur l\'un de vos territoires.'); return; }
     if (this.state.dice.used[dieIndex]) { this.log('Ce dé a déjà été utilisé.'); return; }
@@ -242,67 +221,7 @@ export class GameEngine {
     this.log(`${player.name} rappelle le dé de défense de ${tile.id} (relancé ce tour).`);
   }
 
-  private baseDefenseValue(tile: TileState): number {
-    const defender = tile.pawnId ? this.state.pawns.find(p => p.id === tile.pawnId) : undefined;
-    const natural = defender?.type === 'base-camp' ? 5 : 0;
-    const combined = Math.max(natural, tile.defense ?? 0);
-    return tile.psychicProbed ? Math.min(combined, 1) : combined;
-  }
-
-  private effectiveDefenses(tile: TileState): number[] {
-    const base = this.baseDefenseValue(tile);
-    if (base <= 0) return [];
-    return tile.flyingFortress ? [base, base] : [base];
-  }
-
   // -------------------------------------------------------------- Conquest
-
-  private conquestSatisfied(tile: TileState, subset: number[]): boolean {
-    if (tile.conquestType === 'number') {
-      if (tile.conquest >= 7 && subset.length < 2) return false;
-      return subset.reduce((s, v) => s + v, 0) === tile.conquest;
-    }
-    const required = [...(tile.conquestDice ?? [])].sort((a, b) => a - b);
-    const got = [...subset].sort((a, b) => a - b);
-    return required.length > 0 && got.length === required.length && got.every((v, i) => v === required[i]);
-  }
-
-  private kCombinations(arr: number[], k: number): number[][] {
-    if (k === 0) return [[]];
-    if (arr.length < k) return [];
-    const [first, ...rest] = arr;
-    const withFirst = this.kCombinations(rest, k - 1).map(c => [first, ...c]);
-    const withoutFirst = this.kCombinations(rest, k);
-    return [...withFirst, ...withoutFirst];
-  }
-
-  private canBeatAll(beaters: number[], defenses: number[]): boolean {
-    if (defenses.length === 1) return beaters[0] > defenses[0];
-    const [b0, b1] = beaters, [d0, d1] = defenses;
-    return (b0 > d0 && b1 > d1) || (b0 > d1 && b1 > d0);
-  }
-
-  private resolveDiceAttempt(tile: TileState, values: number[], defenseValues: number[]): boolean {
-    if (defenseValues.length === 0) return this.conquestSatisfied(tile, values);
-    const need = defenseValues.length;
-    if (values.length < need) return false;
-    const indices = values.map((_, i) => i);
-    for (const combo of this.kCombinations(indices, need)) {
-      const beaters = combo.map(i => values[i]);
-      if (!this.canBeatAll(beaters, defenseValues)) continue;
-      const rest = values.filter((_, i) => !combo.includes(i));
-      if (this.conquestSatisfied(tile, rest)) return true;
-    }
-    return false;
-  }
-
-  private describeAttempt(tile: TileState, values: number[], defenseValues: number[]): string {
-    const need = tile.conquestType === 'number' ? String(tile.conquest) : (tile.conquestDice ?? []).join('-');
-    if (!values.length) return `aucun dé sélectionné (il faut ${need}${defenseValues.length ? ` + un dé de défense (>${defenseValues.join(', >')})` : ''})`;
-    const got = values.join(' · ');
-    if (defenseValues.length) return `${got} insuffisant face à ${need} + défense ${defenseValues.join(' et ')}`;
-    return `${got} ≠ ${need}`;
-  }
 
   private conquer(tileId: string, pawnId: string, mode: 'place' | 'pillage', steal?: StealTarget) {
     const tile = this.state.tiles.find(t => t.id === tileId);
@@ -316,7 +235,7 @@ export class GameEngine {
     const pawn = this.state.pawns.find(p => p.id === pawnId && p.ownerId === player.id && !p.removed && p.tileId !== 'cemetery');
     if (!pawn) { this.log('Ce pion est indisponible (détruit ou au Cimetière).'); return; }
 
-    const baseCampBlocked = this.baseCampNeedsPlacement(player);
+    const baseCampBlocked = baseCampNeedsPlacement(this.state, player);
     if (baseCampBlocked && pawn.type !== 'base-camp') { this.log('Vous devez d\'abord replacer votre Camp de Base.'); return; }
 
     const isZeppelinLike = ZEPPELIN_LIKE.includes(pawn.type);
@@ -332,7 +251,7 @@ export class GameEngine {
       const usesReserve = pawn.tileId === 'reserve';
       if (usesReserve) {
         const hasAnyBoardPawn = this.state.pawns.some(p => p.ownerId === player.id && p.tileId !== 'reserve' && p.tileId !== 'cemetery' && !p.removed);
-        if (hasAnyBoardPawn && !this.ownsAdjacentTile(tile, player.id)) {
+        if (hasAnyBoardPawn && !ownsAdjacentTile(this.state, tile, player.id)) {
           this.log('Un pion de Réserve ne peut être posé que sur un territoire adjacent à l\'un des vôtres.');
           return;
         }
@@ -340,9 +259,9 @@ export class GameEngine {
     }
 
     const values = this.state.selectedDice.map(i => this.state.dice.values[i]);
-    const defenseValues = this.effectiveDefenses(tile);
-    if (!this.resolveDiceAttempt(tile, values, defenseValues)) {
-      this.log(`Conquête refusée : ${this.describeAttempt(tile, values, defenseValues)}`);
+    const defenseValues = effectiveDefenses(this.state, tile);
+    if (!resolveDiceAttempt(tile, values, defenseValues)) {
+      this.log(`Conquête refusée : ${describeAttempt(tile, values, defenseValues)}`);
       return;
     }
 
@@ -408,7 +327,12 @@ export class GameEngine {
       this.log(`${attacker.name} vole l'Artefact ${artifactId} à ${defender.name}.`);
       if (!this.state.treasureLost && attacker.artifacts.length >= 4) this.finish(attacker.id, 'Victoire : les 4 Artefacts sont réunis.');
     } else {
-      const inventionId = defender.technologies.find(id => technologyById.get(id as TechCardId)?.kind === 'invention')!;
+      // Neither the attacker nor the engine can target a specific card through the action — of the
+      // defender's Inventions, the most valuable one (to the defender) is the one taken.
+      const inventions = defender.technologies.filter(id => technologyById.get(id as TechCardId)?.kind === 'invention');
+      const inventionId = inventions.reduce((best, id) => (
+        (TECH_UTILITY[id as TechCardId] ?? 0) > (TECH_UTILITY[best as TechCardId] ?? 0) ? id : best
+      ));
       defender.technologies = defender.technologies.filter(id => id !== inventionId);
       attacker.technologies.push(inventionId);
       attacker.techBuiltTurn[inventionId] = this.state.turn - 1;
@@ -452,7 +376,7 @@ export class GameEngine {
 
   private buildTechnology(cardId: string, tileId?: string) {
     const player = this.player();
-    if (this.state.phase !== 'actions' || this.baseCampNeedsPlacement(player)) return;
+    if (this.state.phase !== 'actions' || baseCampNeedsPlacement(this.state, player)) return;
     if (this.state.turnUsed.buildTech) { this.log('Une seule construction par tour.'); return; }
     if (!this.state.techMarket.includes(cardId)) return;
     if (player.technologies.includes(cardId)) return;
@@ -488,14 +412,8 @@ export class GameEngine {
   }
 
   private checkLeviathanVictory(player: PlayerState) {
-    const totalResources = player.technologies.reduce((s, id) => s + (technologyById.get(id as TechCardId)?.costResources ?? 0), 0);
-    const totalSomnium = player.technologies.reduce((s, id) => s + (technologyById.get(id as TechCardId)?.costSomnium ?? 0), 0);
-    const thresholds: Record<number, { resources: number; somnium: number }> = {
-      2: { resources: 21, somnium: 2 },
-      3: { resources: 18, somnium: 2 },
-      4: { resources: 15, somnium: 1 },
-    };
-    const t = thresholds[this.state.players.length] ?? thresholds[4];
+    const { resources: totalResources, somnium: totalSomnium } = leviathanProgress(player);
+    const t = leviathanThreshold(this.state.players.length);
     if (totalResources >= t.resources && totalSomnium >= t.somnium) {
       this.finish(player.id, `Victoire : le Léviathan est construit (${totalResources} Ressources / ${totalSomnium} Somnium cumulés en Technologies).`);
     }
@@ -504,11 +422,11 @@ export class GameEngine {
   private usePsychicProbe(tileId: string) {
     const player = this.player();
     if (this.state.phase !== 'actions') return;
-    if (!this.hasActiveTech(player, 'psychic-probe')) return;
+    if (!hasActiveTech(this.state, player, 'psychic-probe')) return;
     if (this.state.turnUsed.psychicProbe) { this.log('Sonde Psychique déjà utilisée ce tour.'); return; }
     const tile = this.state.tiles.find(t => t.id === tileId);
     if (!tile || !tile.ownerId || tile.ownerId === player.id) return;
-    if (this.baseDefenseValue(tile) <= 0) { this.log('Ce territoire n\'a pas de défense à sonder.'); return; }
+    if (baseDefenseValue(this.state, tile) <= 0) { this.log('Ce territoire n\'a pas de défense à sonder.'); return; }
     tile.psychicProbed = true;
     this.state.turnUsed.psychicProbe = true;
     this.log(`${player.name} utilise la Sonde Psychique sur ${tile.id} : défense réduite à 1.`);
@@ -547,15 +465,15 @@ export class GameEngine {
   private useTransportTunneler(tileId: string, steal?: StealTarget) {
     const player = this.player();
     if (this.state.phase !== 'actions') return;
-    if (!this.hasActiveTech(player, 'transport-tunneller')) return;
+    if (!hasActiveTech(this.state, player, 'transport-tunneller')) return;
     const tile = this.state.tiles.find(t => t.id === tileId);
     if (!tile || !tile.ownerId || tile.ownerId === player.id) return;
     const defenderPawn = tile.pawnId ? this.state.pawns.find(p => p.id === tile.pawnId) : undefined;
     if (defenderPawn?.type !== 'base-camp') { this.log('Le Tunnelier de Transport ne cible que le Camp de Base.'); return; }
 
     const values = this.state.selectedDice.map(i => this.state.dice.values[i]);
-    if (!this.conquestSatisfied(tile, values)) {
-      this.log(`Conquête refusée : ${this.describeAttempt(tile, values, [])}`);
+    if (!conquestSatisfied(tile, values)) {
+      this.log(`Conquête refusée : ${describeAttempt(tile, values, [])}`);
       return;
     }
     this.state.selectedDice.forEach(i => this.state.dice.used[i] = true);
@@ -591,7 +509,7 @@ export class GameEngine {
     if (this.state.phase !== 'actions') return;
     const player = this.player();
 
-    if (!this.baseCampNeedsPlacement(player)) {
+    if (!baseCampNeedsPlacement(this.state, player)) {
       const isForageLike = (id?: string) => !!id && FORAGE_LIKE.includes(this.state.pawns.find(p => p.id === id)?.type as PawnType);
       const filonExtraction = this.state.tiles.filter(t => t.ownerId === player.id && t.terrain === 'somnium-vein' && isForageLike(t.pawnId)).length * 2;
       const normalExtraction = this.state.tiles.filter(t => t.ownerId === player.id && t.terrain !== 'somnium-vein' && t.terrain !== 'machine-cemetery' && isForageLike(t.pawnId)).length;
@@ -601,8 +519,17 @@ export class GameEngine {
       this.log(`${player.name} n'a pas replacé son Camp de Base : pas de récolte de Somnium.`);
     }
 
-    const somniumThreshold = ({ 2: 11, 3: 9, 4: 7 } as Record<number, number>)[this.state.players.length] ?? 7;
-    if (player.somnium >= somniumThreshold) { this.finish(player.id, `Victoire : ${player.somnium} Somnium.`); return; }
+    if (player.somnium >= somniumVictoryThreshold(this.state.players.length)) {
+      this.finish(player.id, `Victoire : ${player.somnium} Somnium.`);
+      return;
+    }
+
+    // Resources can only ever be stored up to 3 — this is a storage cap enforced at the end of
+    // the turn, not at harvest, so a turn can spend down a temporary surplus (e.g. a 4-cost Technology).
+    if (player.resources > 3) {
+      this.log(`${player.name} ne peut stocker que 3 Ressources : le surplus est perdu.`);
+      player.resources = 3;
+    }
 
     this.state.activePlayerId = this.nextPlayerId(player.id);
     this.state.turn += 1;
@@ -615,15 +542,19 @@ export class GameEngine {
   private finish(playerId: PlayerId, message: string) {
     this.state.phase = 'finished';
     this.state.winner = playerId;
+    this.state.winMessage = message;
     this.log(message);
   }
 }
 
 const PLAYER_NAMES: Record<PlayerId, string> = { albion: 'Albion', helios: 'Helios', meridian: 'Meridian', valhalla: 'Valhalla' };
 
-export function createInitialState(tiles: GameState['tiles'], playerCount: 2 | 3 | 4 = 4): GameState {
+export function createInitialState(
+  tiles: GameState['tiles'], playerCount: 2 | 3 | 4 = 4, aiPlayerIds: PlayerId[] = [],
+): GameState {
   const players: PlayerState[] = ALL_PLAYER_IDS.slice(0, playerCount).map(id => ({
     id, name: PLAYER_NAMES[id], resources: 2, somnium: 0, artifacts: [], technologies: [], techBuiltTurn: {},
+    isAI: aiPlayerIds.includes(id),
   }));
   const pawns: PawnState[] = [];
   for (const player of players) {

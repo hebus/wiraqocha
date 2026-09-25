@@ -126,14 +126,39 @@ export class BoardRenderer {
     this.container.removeChildren();
     this.tiles.clear();
 
-    for (const tile of state.tiles) this.drawTile(tile, state, tile.id === selectedTileId);
+    for (const tile of state.tiles) this.drawTile(tile, state);
+
+    // Drawn last (its own top-level container, on top of every tile) so a neighboring tile's
+    // oversized art can never visually cover the selection highlight, regardless of draw order.
+    const selectedTile = selectedTileId ? state.tiles.find((t) => t.id === selectedTileId) : undefined;
+    if (selectedTile) this.drawSelectionOverlay(selectedTile);
+  }
+
+  private drawSelectionOverlay(tile: TileState) {
+    const overlay = new Container();
+    const p = axialToPixel(tile.q, tile.r, this.size);
+    overlay.position.set(p.x, p.y);
+    overlay.eventMode = 'none';
+
+    const highlight = new Graphics();
+    highlight.poly(hexPoints(this.size * 1.1)).stroke({ width: 6, color: 0xffd93d, alpha: 0.95 });
+    overlay.addChild(highlight);
+    const glow = new Graphics();
+    glow.poly(hexPoints(this.size * 1.04)).fill({ color: 0xffd93d, alpha: 0.12 });
+    overlay.addChild(glow);
+    const pointer = new Text({ text: '▼', style: { fontSize: 26, fill: 0xffd93d } });
+    pointer.anchor.set(0.5);
+    pointer.position.set(0, -this.size * 1.35);
+    overlay.addChild(pointer);
+
+    this.container.addChild(overlay);
   }
 
   private texture(path: string) {
     return this.textures.get(path);
   }
 
-  private drawTile(tile: TileState, state: GameState, selected: boolean) {
+  private drawTile(tile: TileState, state: GameState) {
     const c = new Container();
     const p = axialToPixel(tile.q, tile.r, this.size);
     c.position.set(p.x, p.y);
@@ -232,7 +257,7 @@ export class BoardRenderer {
         text: label,
         style: {
           fontFamily: 'Georgia',
-          fontSize: tile.conquestType === 'number' ? 18 : 13,
+          fontSize: tile.conquestType === 'number' ? 24 : 17,
           fill: 0xf8e8c1,
           fontWeight: '700',
           stroke: { color: 0x081014, width: 5 },
@@ -293,19 +318,6 @@ export class BoardRenderer {
       probe.position.set(0, -this.size * 0.53);
       c.addChild(probe);
     }
-    if (selected) {
-      const highlight = new Graphics();
-      highlight.poly(hexPoints(this.size * 1.1)).stroke({ width: 6, color: 0xffd93d, alpha: 0.95 });
-      c.addChild(highlight);
-      const glow = new Graphics();
-      glow.poly(hexPoints(this.size * 1.04)).fill({ color: 0xffd93d, alpha: 0.12 });
-      c.addChild(glow);
-      const pointer = new Text({ text: '▼', style: { fontSize: 26, fill: 0xffd93d } });
-      pointer.anchor.set(0.5);
-      pointer.position.set(0, -this.size * 1.35);
-      c.addChild(pointer);
-    }
-
     if (tile.devastated) {
       const overlay = new Graphics();
       overlay.poly(hexPoints(this.size)).fill({ color: 0x1a0000, alpha: 0.72 });

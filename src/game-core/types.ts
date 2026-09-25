@@ -57,6 +57,8 @@ export interface PlayerState {
   techBuiltTurn: Record<string, number>;
   /** Rayon de la Mort can only ever be used once, for the whole game. */
   deathRayUsed?: boolean;
+  /** True when this player's turns are driven by the AI controller instead of a human. */
+  isAI?: boolean;
 }
 
 export interface DiceState {
@@ -88,6 +90,8 @@ export interface GameState {
   selectedDice: number[];
   log: string[];
   winner?: PlayerId;
+  /** The exact victory-condition message logged when the game ended — shown in the victory banner. */
+  winMessage?: string;
   /** Technology market: 3 cards currently revealed, and the shuffled remainder of the deck. */
   techMarket: string[];
   techDeck: string[];
