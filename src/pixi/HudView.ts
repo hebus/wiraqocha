@@ -1,8 +1,12 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, FillGradient, Graphics, Text, type TextDropShadow } from 'pixi.js';
 import type { GameState } from '../game-core/types';
 import { leviathanProgress, leviathanThreshold, somniumVictoryThreshold } from '../game-core/rules';
 import { Button } from './ui/Button';
 import { COLOR, FONT_SERIF, PLAYER_COLOR, body } from './theme';
+
+// The topbar has no opaque background any more (the board must stay visible through it), so its
+// text needs its own contrast against whatever board art happens to sit behind it.
+const TEXT_SHADOW: TextDropShadow = { color: 0x000000, blur: 3, distance: 1, angle: Math.PI / 2, alpha: 0.9 };
 
 export const TOPBAR_HEIGHT = 66;
 export const PLAYER_STRIP_HEIGHT = 46;
@@ -32,30 +36,30 @@ export class HudView {
   constructor(private onRoll: () => void, private onEndTurn: () => void) {
     this.topContainer.addChild(this.topbarBg);
 
-    const anchor = new Text({ text: '⚓', style: { fontSize: 22, fill: COLOR.goldBright } });
+    const anchor = new Text({ text: '⚓', style: { fontSize: 22, fill: COLOR.goldBright, dropShadow: TEXT_SHADOW } });
     anchor.anchor.set(0, 0.5);
     anchor.position.set(24, TOPBAR_HEIGHT / 2);
     this.topContainer.addChild(anchor);
 
-    const brand = new Text({ text: 'WIRAQOCHA', style: { fontFamily: FONT_SERIF, fontSize: 18, fontWeight: '700', fill: COLOR.goldBright, letterSpacing: 3 } });
+    const brand = new Text({ text: 'WIRAQOCHA', style: { fontFamily: FONT_SERIF, fontSize: 18, fontWeight: '700', fill: COLOR.goldBright, letterSpacing: 3, dropShadow: TEXT_SHADOW } });
     brand.anchor.set(0, 0.5);
     brand.position.set(54, TOPBAR_HEIGHT / 2 - 7);
     this.topContainer.addChild(brand);
 
-    const tagline = new Text({ text: 'EXPEDITION PROTOCOL', style: { fontFamily: FONT_SERIF, fontSize: 8, fill: COLOR.goldDim, letterSpacing: 1.5 } });
+    const tagline = new Text({ text: 'EXPEDITION PROTOCOL', style: { fontFamily: FONT_SERIF, fontSize: 8, fill: COLOR.goldDim, letterSpacing: 1.5, dropShadow: TEXT_SHADOW } });
     tagline.anchor.set(0, 0.5);
     tagline.position.set(55, TOPBAR_HEIGHT / 2 + 9);
     this.topContainer.addChild(tagline);
 
-    this.turnText = new Text({ text: '', style: { fontFamily: FONT_SERIF, fontSize: 13, fill: COLOR.text, letterSpacing: 1 } });
+    this.turnText = new Text({ text: '', style: { fontFamily: FONT_SERIF, fontSize: 13, fill: COLOR.text, letterSpacing: 1, dropShadow: TEXT_SHADOW } });
     this.turnText.anchor.set(0.5, 0.5);
     this.topContainer.addChild(this.turnText);
 
-    this.resourcesText = new Text({ text: '', style: { ...body, fontSize: 13 } });
+    this.resourcesText = new Text({ text: '', style: { ...body, fontSize: 13, dropShadow: TEXT_SHADOW } });
     this.resourcesText.anchor.set(1, 0.5);
     this.topContainer.addChild(this.resourcesText);
 
-    this.phaseText = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 10, fill: COLOR.cyan, letterSpacing: 2 } });
+    this.phaseText = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 10, fill: COLOR.cyan, letterSpacing: 2, dropShadow: TEXT_SHADOW } });
     this.phaseText.position.set(24, TOPBAR_HEIGHT + 4);
     this.topContainer.addChild(this.phaseText);
 
@@ -79,7 +83,18 @@ export class HudView {
   layout(width: number) {
     this.width = width;
     this.topbarBg.clear();
-    this.topbarBg.rect(0, 0, width, TOPBAR_HEIGHT).fill({ color: 0x0b1417, alpha: 0.92 });
+    // A soft top-to-bottom fade rather than a flat panel — the board stays visible through the topbar.
+    const gradient = new FillGradient({
+      type: 'linear',
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: 1 },
+      textureSpace: 'local',
+      colorStops: [
+        { offset: 0, color: 'rgba(6,12,15,0.55)' },
+        { offset: 1, color: 'rgba(6,12,15,0)' },
+      ],
+    });
+    this.topbarBg.rect(0, 0, width, TOPBAR_HEIGHT).fill(gradient);
     this.turnText.position.set(width / 2, TOPBAR_HEIGHT / 2);
     this.resourcesText.position.set(width - 24, TOPBAR_HEIGHT / 2);
   }
