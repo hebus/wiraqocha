@@ -22,6 +22,7 @@ export class BoardView {
   private insetLeft = 0;
   private insetRight = 0;
   private interacted = false;
+  private contentCenterX = 0;
   private contentCenterY = 0;
   private contentWidth = 1;
   private contentHeight = 1;
@@ -88,6 +89,9 @@ export class BoardView {
   private computeContentMetrics(state: GameState) {
     this.board.render(state, null);
     const boardBounds = this.board.container.getLocalBounds();
+    // The hex layout isn't perfectly symmetric around local (0, 0) (see BoardRenderer's row
+    // comment), so both axes need their own content-center offset, not just the vertical one.
+    this.contentCenterX = boardBounds.x + boardBounds.width / 2;
     this.contentCenterY = boardBounds.y + boardBounds.height / 2;
     this.contentWidth = boardBounds.width;
     this.contentHeight = boardBounds.height;
@@ -119,9 +123,13 @@ export class BoardView {
     const visibleW = Math.max(100, this.rectW - this.insetLeft - this.insetRight);
     const availW = Math.max(100, visibleW - pad);
     const availH = Math.max(100, this.rectH - pad);
-    const scale = clampScale(Math.min(availW / this.contentWidth, availH / this.contentHeight));
+    const rawScale = Math.min(availW / this.contentWidth, availH / this.contentHeight);
+    const scale = clampScale(rawScale);
     this.world.scale.set(scale);
-    this.world.position.set(this.insetLeft + visibleW / 2, this.rectH / 2 - this.contentCenterY * scale);
+    this.world.position.set(
+      this.insetLeft + visibleW / 2 - this.contentCenterX * scale,
+      this.rectH / 2 - this.contentCenterY * scale,
+    );
   }
 
   destroy() {
