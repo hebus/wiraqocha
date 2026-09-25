@@ -113,7 +113,7 @@ export class HudView {
     const y = TOPBAR_HEIGHT + 10;
     const buildCard = (p: (typeof state.players)[number]) => {
       const lev = leviathanProgress(p);
-      return this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length);
+      return this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length, p.id === state.activePlayerId);
     };
 
     // Players 1-2 grow inward from the left edge (under the action panel column); with 3-4
@@ -163,6 +163,7 @@ export class HudView {
   private buildPlayerCard(
     id: string, name: string, somnium: number, somniumGoal: number, resources: number,
     lev: { resources: number; somnium: number }, leviathanGoal: { resources: number; somnium: number }, artifacts: number,
+    isActive: boolean,
   ): Container {
     const c = new Container();
     const color = PLAYER_COLOR[id] ?? 0xffffff;
@@ -186,7 +187,7 @@ export class HudView {
     const bg = new Graphics();
     bg.roundRect(0, 0, width, cardHeight, 8)
       .fill({ color: COLOR.panelBg, alpha: 0.9 })
-      .stroke({ width: 1, color });
+      .stroke({ width: isActive ? 3 : 1, color, alpha: isActive ? 1 : 0.8 });
     const dot = new Graphics();
     dot.circle(11, cardHeight / 2, 4).fill({ color });
     c.addChild(bg, dot, line1, line2);
