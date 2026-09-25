@@ -8,7 +8,6 @@ import { BoardView } from '../pixi/BoardView';
 import { DiceTrayView } from '../pixi/DiceTrayView';
 import { ActionPanelView, type InteractionMode } from '../pixi/ActionPanelView';
 import { LogPanelView } from '../pixi/LogPanelView';
-import { Panel } from '../pixi/ui/Panel';
 import { COLOR, hint as hintStyle } from '../pixi/theme';
 
 const HINTS: Record<InteractionMode, string> = {
@@ -31,7 +30,12 @@ const GAP = 12;
 const SIDE_PANEL_WIDTH = 340;
 const LOG_PANEL_WIDTH = 260;
 const JOURNAL_HEIGHT = 300;
-const DICE_BOX_PADDING = 16;
+// Wide enough for 5 dice (48px each, 14px gaps) side by side, even though the journal column
+// itself is narrower — this area has no background box, so it's free to overhang it a little.
+const DICE_AREA_WIDTH = 320;
+// Fixed height reserved for the dice row (die + its tool buttons below), so the turn button right
+// under it never shifts position depending on whether dice are currently showing.
+const DICE_ROW_RESERVED_HEIGHT = 78;
 
 /** Top-level game screen: composes Hud/Board/DiceTray/ActionPanel/LogPanel, owns the interaction mode and the AI turn scheduler. */
 export class GameScene {
@@ -43,7 +47,6 @@ export class GameScene {
   private diceTray: DiceTrayView;
   private actionPanel: ActionPanelView;
   private logPanel: LogPanelView;
-  private diceBox: Panel;
   private aiBanner: Text;
   private hintText: Text;
 
@@ -53,6 +56,7 @@ export class GameScene {
 
   private screenWidth = 1;
   private screenHeight = 1;
+  private diceAreaX = 0;
 
   private aiTicksThisTurn = 0;
   private aiTurnKey: string | null = null;
@@ -73,23 +77,21 @@ export class GameScene {
     }, this.overlayLayer);
     this.logPanel = new LogPanelView();
 
-    // The journal only ever shows a handful of lines (the engine caps it at 16), so it doesn't
-    // need the side column's full height — the dice tray and turn button live in the space below it.
-    this.diceBox = new Panel({ width: 1, height: 1 });
-    this.diceBox.addChild(this.diceTray.container, this.hud.actionContainer);
-
     this.aiBanner = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 12, fill: COLOR.cyan } });
     this.aiBanner.anchor.set(0.5, 0);
     this.hintText = new Text({ text: '', style: { ...hintStyle, wordWrap: false, align: 'center' } });
     this.hintText.anchor.set(0.5, 0);
 
     // Board first (bottom of the stack) so it fills the whole screen behind every floating HUD panel.
+    // The journal only ever shows a handful of lines (the engine caps it at 16), so it doesn't need
+    // the side column's full height — the dice tray and turn button float, unboxed, below it.
     this.container.addChild(
       this.board.container,
       this.hud.topContainer,
       this.actionPanel.container,
       this.logPanel.container,
-      this.diceBox,
+      this.diceTray.container,
+      this.hud.actionContainer,
       this.aiBanner,
       this.hintText,
       this.overlayLayer,
@@ -125,10 +127,10 @@ export class GameScene {
     this.logPanel.container.position.set(rightX, sideY);
     this.logPanel.layout(LOG_PANEL_WIDTH, journalHeight);
 
-    const diceBoxY = sideY + journalHeight + GAP;
-    const diceBoxHeight = Math.max(120, sideHeight - journalHeight - GAP);
-    this.diceBox.position.set(rightX, diceBoxY);
-    this.diceBox.resize(LOG_PANEL_WIDTH, diceBoxHeight);
+    // Centered on the journal column, but wider than it (see DICE_AREA_WIDTH) since there's no
+    // background box constraining it any more — clamped so it can't run off the right edge.
+    const idealDiceAreaX = rightX + LOG_PANEL_WIDTH / 2 - DICE_AREA_WIDTH / 2;
+    this.diceAreaX = Math.min(idealDiceAreaX, width - DICE_AREA_WIDTH - GAP);
 
     this.renderAll();
   }
@@ -262,14 +264,16 @@ export class GameScene {
     this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
     this.hintText.position.set(centerX, this.screenHeight - 24 - (this.hintText.height || 16));
 
-    // Dice tray + turn button, stacked in the box below the journal.
-    const innerWidth = this.diceBox.panelWidth - DICE_BOX_PADDING * 2;
-    const diceWidth = this.diceTray.container.getLocalBounds().width;
-    this.diceTray.container.position.set(DICE_BOX_PADDING + Math.max(0, (innerWidth - diceWidth) / 2), DICE_BOX_PADDING);
-    const diceHeight = this.diceTray.container.getLocalBounds().height || 48;
+    // Dice tray + turn button, stacked and anchored to the bottom-right corner, unboxed.
+    const bottomMargin = 28;
+    const actionBtnHeight = this.hud.actionContainer.getLocalBounds().height || 48;
+    const actionBtnY = this.screenHeight - bottomMargin - actionBtnHeight;
+    const diceAreaY = actionBtnY - 16 - DICE_ROW_RESERVED_HEIGHT;
 
+    const diceWidth = this.diceTray.container.getLocalBounds().width;
+    this.diceTray.container.position.set(this.diceAreaX + Math.max(0, (DICE_AREA_WIDTH - diceWidth) / 2), diceAreaY);
     const actionBtnWidth = this.hud.actionContainer.getLocalBounds().width;
-    this.hud.actionContainer.position.set(DICE_BOX_PADDING + Math.max(0, (innerWidth - actionBtnWidth) / 2), DICE_BOX_PADDING + diceHeight + 16);
+    this.hud.actionContainer.position.set(this.diceAreaX + Math.max(0, (DICE_AREA_WIDTH - actionBtnWidth) / 2), actionBtnY);
   }
 
   destroy() {
