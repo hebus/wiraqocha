@@ -30,11 +30,9 @@ const GAP = 12;
 const SIDE_PANEL_WIDTH = 340;
 const LOG_PANEL_WIDTH = 260;
 const JOURNAL_HEIGHT = 300;
-// Wide enough for 5 dice (48px each, 14px gaps) side by side, even though the journal column
-// itself is narrower — this area has no background box, so it's free to overhang it a little.
-const DICE_AREA_WIDTH = 320;
 // Fixed height reserved for the dice row (die + its tool buttons below), so the turn button right
-// under it never shifts position depending on whether dice are currently showing.
+// under it never shifts position depending on whether dice are currently showing. Tall enough for
+// the widest per-die tool stack (adjust/adjust/reroll/exoskeleton).
 const DICE_ROW_RESERVED_HEIGHT = 78;
 
 /** Top-level game screen: composes Hud/Board/DiceTray/ActionPanel/LogPanel, owns the interaction mode and the AI turn scheduler. */
@@ -56,7 +54,6 @@ export class GameScene {
 
   private screenWidth = 1;
   private screenHeight = 1;
-  private diceAreaX = 0;
 
   private aiTicksThisTurn = 0;
   private aiTurnKey: string | null = null;
@@ -126,11 +123,6 @@ export class GameScene {
     const journalHeight = Math.min(JOURNAL_HEIGHT, sideHeight * 0.6);
     this.logPanel.container.position.set(rightX, sideY);
     this.logPanel.layout(LOG_PANEL_WIDTH, journalHeight);
-
-    // Centered on the journal column, but wider than it (see DICE_AREA_WIDTH) since there's no
-    // background box constraining it any more — clamped so it can't run off the right edge.
-    const idealDiceAreaX = rightX + LOG_PANEL_WIDTH / 2 - DICE_AREA_WIDTH / 2;
-    this.diceAreaX = Math.min(idealDiceAreaX, width - DICE_AREA_WIDTH - GAP);
 
     this.renderAll();
   }
@@ -270,10 +262,15 @@ export class GameScene {
     const actionBtnY = this.screenHeight - bottomMargin - actionBtnHeight;
     const diceAreaY = actionBtnY - 16 - DICE_ROW_RESERVED_HEIGHT;
 
+    // Right-aligned to the screen edge rather than centered in a fixed-width area: with several
+    // dice each showing 3-4 tool buttons, the tray can get wider than any fixed budget, and a
+    // fixed-width center would push its far edge off-screen. Growing left from a fixed right edge
+    // instead means it's never clipped, just spills a bit further over the board when it's wide.
+    const rightEdge = this.screenWidth - GAP;
     const diceWidth = this.diceTray.container.getLocalBounds().width;
-    this.diceTray.container.position.set(this.diceAreaX + Math.max(0, (DICE_AREA_WIDTH - diceWidth) / 2), diceAreaY);
+    this.diceTray.container.position.set(rightEdge - diceWidth, diceAreaY);
     const actionBtnWidth = this.hud.actionContainer.getLocalBounds().width;
-    this.hud.actionContainer.position.set(this.diceAreaX + Math.max(0, (DICE_AREA_WIDTH - actionBtnWidth) / 2), actionBtnY);
+    this.hud.actionContainer.position.set(rightEdge - actionBtnWidth, actionBtnY);
   }
 
   destroy() {
