@@ -28,6 +28,7 @@ const AI_TICK_DELAY_JITTER_MS = 200;
 
 const GAP = 12;
 const SIDE_PANEL_WIDTH = 340;
+const LOG_PANEL_WIDTH = 260;
 
 /** Top-level game screen: composes Hud/Board/DiceTray/ActionPanel/LogPanel, owns the interaction mode and the AI turn scheduler. */
 export class GameScene {
@@ -101,18 +102,17 @@ export class GameScene {
     this.screenHeight = height;
     this.hud.layout(width);
 
-    // The board always fills the entire screen; the HUD chrome floats on top of it.
-    this.board.layout(0, 0, width, height);
+    // Actions on the left, journal on the right — bookending the board, which fits and centers
+    // itself in the gap left between them (the board still covers the full screen, so panning
+    // can slide it under either panel).
+    this.board.layout(0, 0, width, height, GAP + SIDE_PANEL_WIDTH + GAP, LOG_PANEL_WIDTH + GAP * 2);
 
-    const sideX = GAP;
     const sideY = HUD_HEIGHT + GAP;
     const sideHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2);
-    const actionPanelHeight = Math.floor(sideHeight * 0.62);
-    const logPanelHeight = sideHeight - actionPanelHeight - GAP;
-    this.actionPanel.container.position.set(sideX, sideY);
-    this.actionPanel.layout(SIDE_PANEL_WIDTH, actionPanelHeight);
-    this.logPanel.container.position.set(sideX, sideY + actionPanelHeight + GAP);
-    this.logPanel.layout(SIDE_PANEL_WIDTH, logPanelHeight);
+    this.actionPanel.container.position.set(GAP, sideY);
+    this.actionPanel.layout(SIDE_PANEL_WIDTH, sideHeight);
+    this.logPanel.container.position.set(width - LOG_PANEL_WIDTH - GAP, sideY);
+    this.logPanel.layout(LOG_PANEL_WIDTH, sideHeight);
 
     this.renderAll();
   }
@@ -238,11 +238,11 @@ export class GameScene {
   }
 
   private repositionDynamicElements() {
-    // Centered on the area not covered by the floating side panel (now on the left), not the full
-    // screen width, so these overlays line up with the visually "free" part of the board behind them.
-    const sideOffset = SIDE_PANEL_WIDTH + GAP;
-    const visibleWidth = Math.max(200, this.screenWidth - sideOffset);
-    const centerX = sideOffset + visibleWidth / 2;
+    // Centered in the same gap between the action panel and the journal that the board itself
+    // fits and centers into (see layout()'s board.layout() insets).
+    const insetLeft = GAP + SIDE_PANEL_WIDTH + GAP;
+    const insetRight = LOG_PANEL_WIDTH + GAP * 2;
+    const centerX = insetLeft + (this.screenWidth - insetLeft - insetRight) / 2;
     this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
 
     const margin = 24;

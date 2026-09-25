@@ -19,6 +19,8 @@ export class BoardView {
 
   private rectW = 1;
   private rectH = 1;
+  private insetLeft = 0;
+  private insetRight = 0;
   private interacted = false;
   private contentCenterY = 0;
   private contentWidth = 1;
@@ -97,10 +99,15 @@ export class BoardView {
     this.board.render(state, selectedTileId);
   }
 
-  layout(x: number, y: number, width: number, height: number) {
+  /** `insetLeft`/`insetRight` describe the floating side panels (action panel / journal) — the board
+   * itself still covers the full (x, y, width, height) rect (so panning can slide it under them),
+   * but `fit()` sizes and centers its content in the gap those panels leave clear between them. */
+  layout(x: number, y: number, width: number, height: number, insetLeft = 0, insetRight = 0) {
     this.container.position.set(x, y);
     this.rectW = width;
     this.rectH = height;
+    this.insetLeft = insetLeft;
+    this.insetRight = insetRight;
     this.mask_.clear();
     this.mask_.rect(0, 0, width, height).fill({ color: 0xffffff });
     this.loadingText.position.set(width / 2, height / 2);
@@ -109,11 +116,12 @@ export class BoardView {
 
   private fit() {
     const pad = 48;
-    const availW = Math.max(100, this.rectW - pad);
+    const visibleW = Math.max(100, this.rectW - this.insetLeft - this.insetRight);
+    const availW = Math.max(100, visibleW - pad);
     const availH = Math.max(100, this.rectH - pad);
     const scale = clampScale(Math.min(availW / this.contentWidth, availH / this.contentHeight));
     this.world.scale.set(scale);
-    this.world.position.set(this.rectW / 2, this.rectH / 2 - this.contentCenterY * scale);
+    this.world.position.set(this.insetLeft + visibleW / 2, this.rectH / 2 - this.contentCenterY * scale);
   }
 
   destroy() {
