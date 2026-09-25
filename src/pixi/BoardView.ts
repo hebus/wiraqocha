@@ -4,18 +4,16 @@ import { BoardRenderer } from './BoardRenderer';
 import { COLOR, FONT_SERIF } from './theme';
 
 const MIN_SCALE = 0.35;
-const MAX_SCALE = 2.5;
+const MAX_SCALE = 3;
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
-/** Board viewport: hosts `BoardRenderer` plus pan/zoom/fit and the title header, scoped to an arbitrary rect. */
+/** Board viewport: hosts `BoardRenderer` plus pan/zoom/fit, scoped to an arbitrary rect. */
 export class BoardView {
   readonly container = new Container();
   private mask_ = new Graphics();
   private world = new Container();
   private board: BoardRenderer;
   private loadingText: Text;
-  private title: Text;
-  private subtitle: Text;
   private ready = false;
   private lastState: GameState | null = null;
 
@@ -37,14 +35,6 @@ export class BoardView {
 
     this.board = new BoardRenderer(onTile);
     this.world.addChild(this.board.container);
-
-    this.title = new Text({ text: 'WIRAQOCHA', style: { fontFamily: FONT_SERIF, fontSize: 30, fontWeight: '700', fill: COLOR.goldBright, letterSpacing: 4 } });
-    this.title.anchor.set(0.5);
-    this.world.addChild(this.title);
-
-    this.subtitle = new Text({ text: 'EXPLORATION • TECHNOLOGIE • EMPIRE', style: { fontFamily: FONT_SERIF, fontSize: 12, fill: COLOR.goldDim, letterSpacing: 2 } });
-    this.subtitle.anchor.set(0.5);
-    this.world.addChild(this.subtitle);
 
     this.loadingText = new Text({ text: 'Chargement du plateau…', style: { fontFamily: FONT_SERIF, fontSize: 14, fill: COLOR.textDim } });
     this.loadingText.anchor.set(0.5);
@@ -96,13 +86,9 @@ export class BoardView {
   private computeContentMetrics(state: GameState) {
     this.board.render(state, null);
     const boardBounds = this.board.container.getLocalBounds();
-    this.title.position.set(0, boardBounds.y - 40);
-    this.subtitle.position.set(0, boardBounds.y - 10);
-    const contentTop = this.title.y - 22;
-    const contentBottom = boardBounds.y + boardBounds.height;
-    this.contentCenterY = (contentTop + contentBottom) / 2;
+    this.contentCenterY = boardBounds.y + boardBounds.height / 2;
     this.contentWidth = boardBounds.width;
-    this.contentHeight = contentBottom - contentTop;
+    this.contentHeight = boardBounds.height;
   }
 
   render(state: GameState, selectedTileId?: string | null) {
@@ -122,7 +108,7 @@ export class BoardView {
   }
 
   private fit() {
-    const pad = 64;
+    const pad = 48;
     const availW = Math.max(100, this.rectW - pad);
     const availH = Math.max(100, this.rectH - pad);
     const scale = clampScale(Math.min(availW / this.contentWidth, availH / this.contentHeight));

@@ -28,7 +28,6 @@ const AI_TICK_DELAY_JITTER_MS = 200;
 
 const GAP = 12;
 const SIDE_PANEL_WIDTH = 340;
-const BOTTOM_BAR_HEIGHT = 200;
 
 /** Top-level game screen: composes Hud/Board/DiceTray/ActionPanel/LogPanel, owns the interaction mode and the AI turn scheduler. */
 export class GameScene {
@@ -47,7 +46,8 @@ export class GameScene {
   private pendingTileId: string | null = null;
   private pendingPawnId: string | null = null;
 
-  private boardRect = { x: 0, y: 0, width: 1, height: 1 };
+  private screenWidth = 1;
+  private screenHeight = 1;
 
   private aiTicksThisTurn = 0;
   private aiTurnKey: string | null = null;
@@ -70,12 +70,13 @@ export class GameScene {
 
     this.aiBanner = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 12, fill: COLOR.cyan } });
     this.aiBanner.anchor.set(0.5, 0);
-    this.hintText = new Text({ text: '', style: { ...hintStyle, align: 'center' } });
+    this.hintText = new Text({ text: '', style: { ...hintStyle, wordWrap: false, align: 'center' } });
     this.hintText.anchor.set(0.5, 0);
 
+    // Board first (bottom of the stack) so it fills the whole screen behind every floating HUD panel.
     this.container.addChild(
-      this.hud.topContainer,
       this.board.container,
+      this.hud.topContainer,
       this.diceTray.container,
       this.actionPanel.container,
       this.logPanel.container,
@@ -96,12 +97,12 @@ export class GameScene {
   }
 
   layout(width: number, height: number) {
+    this.screenWidth = width;
+    this.screenHeight = height;
     this.hud.layout(width);
 
-    const boardWidth = Math.max(200, width - SIDE_PANEL_WIDTH - GAP * 3);
-    const boardHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2 - BOTTOM_BAR_HEIGHT);
-    this.boardRect = { x: GAP, y: HUD_HEIGHT + GAP, width: boardWidth, height: boardHeight };
-    this.board.layout(this.boardRect.x, this.boardRect.y, this.boardRect.width, this.boardRect.height);
+    // The board always fills the entire screen; the HUD chrome floats on top of it.
+    this.board.layout(0, 0, width, height);
 
     const sideX = width - SIDE_PANEL_WIDTH - GAP;
     const sideY = HUD_HEIGHT + GAP;
@@ -237,19 +238,24 @@ export class GameScene {
   }
 
   private repositionDynamicElements() {
-    const centerX = this.boardRect.x + this.boardRect.width / 2;
-    this.aiBanner.position.set(centerX, this.boardRect.y + 14);
+    // Centered on the area not covered by the floating side panel, not the full screen width,
+    // so these overlays line up with the visually "free" part of the board behind them.
+    const visibleWidth = Math.max(200, this.screenWidth - SIDE_PANEL_WIDTH - GAP);
+    const centerX = visibleWidth / 2;
+    this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
 
-    const diceWidth = this.diceTray.container.getLocalBounds().width;
-    const bottomY = this.boardRect.y + this.boardRect.height + GAP;
-    this.diceTray.container.position.set(centerX - diceWidth / 2, bottomY);
-    const diceHeight = this.diceTray.container.getLocalBounds().height || 48;
+    const margin = 24;
+    const hintHeight = this.hintText.height || 16;
+    this.hintText.position.set(centerX, this.screenHeight - margin - hintHeight);
 
     const actionBtnWidth = this.hud.actionContainer.getLocalBounds().width;
-    this.hud.actionContainer.position.set(centerX - actionBtnWidth / 2, bottomY + diceHeight + 14);
     const actionBtnHeight = this.hud.actionContainer.getLocalBounds().height || 48;
+    const actionY = this.hintText.y - 12 - actionBtnHeight;
+    this.hud.actionContainer.position.set(centerX - actionBtnWidth / 2, actionY);
 
-    this.hintText.position.set(centerX, bottomY + diceHeight + 14 + actionBtnHeight + 10);
+    const diceWidth = this.diceTray.container.getLocalBounds().width;
+    const diceHeight = this.diceTray.container.getLocalBounds().height || 48;
+    this.diceTray.container.position.set(centerX - diceWidth / 2, actionY - 14 - diceHeight);
   }
 
   destroy() {
