@@ -104,7 +104,7 @@ export class GameScene {
     // The board always fills the entire screen; the HUD chrome floats on top of it.
     this.board.layout(0, 0, width, height);
 
-    const sideX = width - SIDE_PANEL_WIDTH - GAP;
+    const sideX = GAP;
     const sideY = HUD_HEIGHT + GAP;
     const sideHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2);
     const actionPanelHeight = Math.floor(sideHeight * 0.62);
@@ -238,10 +238,11 @@ export class GameScene {
   }
 
   private repositionDynamicElements() {
-    // Centered on the area not covered by the floating side panel, not the full screen width,
-    // so these overlays line up with the visually "free" part of the board behind them.
-    const visibleWidth = Math.max(200, this.screenWidth - SIDE_PANEL_WIDTH - GAP);
-    const centerX = visibleWidth / 2;
+    // Centered on the area not covered by the floating side panel (now on the left), not the full
+    // screen width, so these overlays line up with the visually "free" part of the board behind them.
+    const sideOffset = SIDE_PANEL_WIDTH + GAP;
+    const visibleWidth = Math.max(200, this.screenWidth - sideOffset);
+    const centerX = sideOffset + visibleWidth / 2;
     this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
 
     const margin = 24;
