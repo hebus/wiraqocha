@@ -111,7 +111,7 @@ export class HudView {
 
     this.playerStrip.removeChildren();
     let x = 24;
-    const y = TOPBAR_HEIGHT + 20;
+    const y = TOPBAR_HEIGHT + 10;
     for (const p of state.players) {
       const lev = leviathanProgress(p);
       const card = this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length);
