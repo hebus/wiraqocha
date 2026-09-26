@@ -249,27 +249,6 @@ export class BoardRenderer {
       }
     }
 
-    // Conquest value — a straight number, or the exact dice combination required
-    // for a 'double'/'suite' tile (e.g. "6-6", "4-5-6").
-    if (interactable) {
-      const label = tile.conquestType === 'number' ? String(tile.conquest) : (tile.conquestDice ?? []).join('-');
-      const number = new Text({
-        text: label,
-        style: {
-          fontFamily: 'Georgia',
-          fontSize: tile.conquestType === 'number' ? 24 : 17,
-          fill: 0xf8e8c1,
-          fontWeight: '700',
-          stroke: { color: 0x081014, width: 5 },
-        },
-      });
-      number.anchor.set(0.5);
-      // A pawn standing on the tile covers the centered number, so shift it right
-      // (same row) instead of overlapping.
-      number.position.set(tile.pawnId ? this.size * 0.58 : 0, this.size * 0.55);
-      c.addChild(number);
-    }
-
     const pawn = tile.pawnId ? state.pawns.find((p) => p.id === tile.pawnId) : undefined;
 
     // A Camp de Base always carries a natural defense of 5, even with no die
@@ -300,6 +279,28 @@ export class BoardRenderer {
     }
 
     if (pawn) this.drawPawn(c, pawn.type, pawn.ownerId);
+
+    // Conquest value — a straight number, or the exact dice combination required
+    // for a 'double'/'suite' tile (e.g. "6-6", "4-5-6"). Drawn after the pawn so
+    // it always stays on top, even with the larger pawn sprites.
+    if (interactable) {
+      const label = tile.conquestType === 'number' ? String(tile.conquest) : (tile.conquestDice ?? []).join('-');
+      const number = new Text({
+        text: label,
+        style: {
+          fontFamily: 'Georgia',
+          fontSize: tile.conquestType === 'number' ? 24 : 17,
+          fill: 0xf8e8c1,
+          fontWeight: '700',
+          stroke: { color: 0x081014, width: 5 },
+        },
+      });
+      number.anchor.set(0.5);
+      // A pawn standing on the tile covers the centered number, so shift it right
+      // (same row) instead of overlapping.
+      number.position.set(tile.pawnId ? this.size * 0.58 : 0, this.size * 0.55);
+      c.addChild(number);
+    }
 
     if (tile.forceField) {
       const ring = new Graphics();
@@ -345,7 +346,7 @@ export class BoardRenderer {
   private drawPawn(parent: Container, type: PawnType, ownerId: string) {
     const sprite = new Sprite(this.texture(pawnAsset[type]));
     sprite.anchor.set(0.5, 0.72);
-    const targetWidth = type === 'zeppelin' ? 76 : type === 'base-camp' ? 62 : 50;
+    const targetWidth = (type === 'zeppelin' ? 76 : type === 'base-camp' ? 62 : 50) * 1.5;
     sprite.width = targetWidth;
     sprite.scale.y = sprite.scale.x;
     sprite.position.set(0, type === 'zeppelin' ? -5 : 12);
