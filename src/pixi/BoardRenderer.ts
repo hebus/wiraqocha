@@ -2,6 +2,11 @@ import { Assets, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { OutlineFilter } from 'pixi-filters';
 import type { GameState, PawnType, TileState } from '../game-core/types';
 
+// Deployed as a GitHub Pages project site (served from /<repo>/, not the domain root — see
+// vite.config.ts's `base`), so every asset URL needs that prefix at runtime; Vite only rewrites
+// paths it can statically see (imports), not plain string literals like these.
+const asset = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+
 // Shared across every pawn sprite (not recreated per-tile-render) — follows each sprite's
 // actual alpha silhouette, unlike a plain circle/ring, so it works for the pawns' irregular
 // character shapes (hat, backpack, zeppelin fins, etc.).
@@ -18,48 +23,48 @@ const playerColor: Record<string, number> = {
 // (all three pick their own dedicated ground art below) — they just need a
 // valid, existing file here to satisfy the Record and preload without erroring.
 const terrainAsset: Record<TileState['terrain'], string> = {
-  jungle: '/assets/terrain/jungle.png',
-  ruins: '/assets/terrain/jungle.png',
-  mountain: '/assets/terrain/mountain.png',
-  'somnium-vein': '/assets/terrain/jungle.png',
-  'machine-cemetery': '/assets/terrain/machine-cemetery.png',
-  village: '/assets/terrain/jungle.png',
+  jungle: asset('assets/terrain/jungle.png'),
+  ruins: asset('assets/terrain/jungle.png'),
+  mountain: asset('assets/terrain/mountain.png'),
+  'somnium-vein': asset('assets/terrain/jungle.png'),
+  'machine-cemetery': asset('assets/terrain/machine-cemetery.png'),
+  village: asset('assets/terrain/jungle.png'),
 };
 
 const pawnAsset: Record<PawnType, string> = {
-  'base-camp': '/assets/pawns/base-camp.png',
-  explorer: '/assets/pawns/explorer.png',
-  drilling: '/assets/pawns/drilling.png',
-  zeppelin: '/assets/pawns/zeppelin.png',
-  'android-explorer': '/assets/pawns/android-explorer.png',
-  juggernaut: '/assets/pawns/juggernaut.png',
-  'mechanical-miner': '/assets/pawns/mechanical-miner.png',
+  'base-camp': asset('assets/pawns/base-camp.png'),
+  explorer: asset('assets/pawns/explorer.png'),
+  drilling: asset('assets/pawns/drilling.png'),
+  zeppelin: asset('assets/pawns/zeppelin.png'),
+  'android-explorer': asset('assets/pawns/android-explorer.png'),
+  juggernaut: asset('assets/pawns/juggernaut.png'),
+  'mechanical-miner': asset('assets/pawns/mechanical-miner.png'),
 };
 
 const tokenAsset = {
-  1: '/assets/tokens/artifact-1.png',
-  2: '/assets/tokens/artifact-2.png',
-  3: '/assets/tokens/artifact-3.png',
-  4: '/assets/tokens/artifact-4.png',
+  1: asset('assets/tokens/artifact-1.png'),
+  2: asset('assets/tokens/artifact-2.png'),
+  3: asset('assets/tokens/artifact-3.png'),
+  4: asset('assets/tokens/artifact-4.png'),
 } as const;
 
 // Dedicated Village ground art (jungle vs. montagne), pointy-top cropped like
 // the rest of the terrain art — no rotation needed.
 const villageTerrainAsset = {
-  jungle: '/assets/terrain/jungle_village.png',
-  mountain: '/assets/terrain/mountain_village.png',
+  jungle: asset('assets/terrain/jungle_village.png'),
+  mountain: asset('assets/terrain/mountain_village.png'),
 };
 
 // Dedicated Temple (Ruines) ground art (jungle vs. montagne).
 const ruinsTerrainAsset = {
-  jungle: '/assets/terrain/jungle_ruins.png',
-  mountain: '/assets/terrain/mountain_ruins.png',
+  jungle: asset('assets/terrain/jungle_ruins.png'),
+  mountain: asset('assets/terrain/mountain_ruins.png'),
 };
 
 // Dedicated Filon de Somnium ground art (jungle vs. montagne).
 const somniumTerrainAsset = {
-  jungle: '/assets/terrain/jungle_somnium.png',
-  mountain: '/assets/terrain/mountain_somnium.png',
+  jungle: asset('assets/terrain/jungle_somnium.png'),
+  mountain: asset('assets/terrain/mountain_somnium.png'),
 };
 
 // Pointy-top hex layout (rows) — matches the terrain art's native hex crop, so
@@ -110,10 +115,10 @@ export class BoardRenderer {
       ...Object.values(terrainAsset),
       ...Object.values(pawnAsset),
       ...Object.values(tokenAsset),
-      '/assets/tokens/force-field.png',
-      '/assets/tokens/flying-fortress.png',
-      '/assets/tokens/death-ray.png',
-      '/assets/resources/somnium.png',
+      asset('assets/tokens/force-field.png'),
+      asset('assets/tokens/flying-fortress.png'),
+      asset('assets/tokens/death-ray.png'),
+      asset('assets/resources/somnium.png'),
       ...Object.values(villageTerrainAsset),
       ...Object.values(ruinsTerrainAsset),
       ...Object.values(somniumTerrainAsset),
