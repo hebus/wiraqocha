@@ -2,4 +2,6 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; overflow: hidden; background: #081014; }
 body { position: fixed; inset: 0; width: 100%; height: 100%; }
-canvas { display: block; }
+/* Without this, iOS Safari treats a two-finger pinch as a native page zoom instead of
+   passing it through as pointer events, so our own pinch-to-zoom never sees it. */
+canvas { display: block; touch-action: none; }

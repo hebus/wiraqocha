@@ -31,6 +31,18 @@ export class BoardView {
   private last = { x: 0, y: 0 };
   private lastTapTime = 0;
 
+  // Two-finger pinch-to-zoom (touch has no wheel event) — tracks every active pointer by id so a
+  // second finger going down mid-drag cleanly switches from panning to pinching, and lifting one
+  // finger back to panning resumes from the remaining finger's current position with no jump.
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinchStartDistance = 1;
+  private pinchStartScale = 1;
+  private pinchAnchor = { x: 0, y: 0 };
+  // Pixi fires a `pointertap` per finger on release (not one for the whole gesture), so lifting
+  // a pinch's two fingers produces two taps back-to-back — indistinguishable from a genuine
+  // double-tap unless we remember the gesture involved more than one pointer at once.
+  private maxSimultaneousPointers = 0;
+
   constructor(onTile: (id: string) => void) {
     this.container.addChild(this.mask_);
     this.container.mask = this.mask_;
@@ -46,14 +58,40 @@ export class BoardView {
     this.container.eventMode = 'static';
     this.container.cursor = 'grab';
     this.container.on('pointerdown', (e: FederatedPointerEvent) => {
-      this.dragging = true;
-      this.last = { x: e.global.x, y: e.global.y };
-      this.container.cursor = 'grabbing';
+      if (this.pointers.size === 0) this.maxSimultaneousPointers = 0;
+      this.pointers.set(e.pointerId, { x: e.global.x, y: e.global.y });
+      this.maxSimultaneousPointers = Math.max(this.maxSimultaneousPointers, this.pointers.size);
+      if (this.pointers.size >= 2) {
+        this.dragging = false;
+        this.startPinch();
+      } else {
+        this.dragging = true;
+        this.last = { x: e.global.x, y: e.global.y };
+        this.container.cursor = 'grabbing';
+      }
     });
-    const stopDrag = () => { this.dragging = false; this.container.cursor = 'grab'; };
-    this.container.on('pointerup', stopDrag);
-    this.container.on('pointerupoutside', stopDrag);
+    const stopPointer = (e: FederatedPointerEvent) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size >= 2) {
+        this.startPinch();
+      } else if (this.pointers.size === 1) {
+        // Resume single-finger panning from the remaining finger's current spot, not a stale one.
+        const [remaining] = this.pointers.values();
+        this.dragging = true;
+        this.last = { x: remaining.x, y: remaining.y };
+      } else {
+        this.dragging = false;
+        this.container.cursor = 'grab';
+      }
+    };
+    this.container.on('pointerup', stopPointer);
+    this.container.on('pointerupoutside', stopPointer);
     this.container.on('pointermove', (e: FederatedPointerEvent) => {
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.global.x, y: e.global.y });
+      if (this.pointers.size >= 2) {
+        this.updatePinch();
+        return;
+      }
       if (!this.dragging) return;
       this.interacted = true;
       this.world.position.x += e.global.x - this.last.x;
@@ -61,6 +99,7 @@ export class BoardView {
       this.last = { x: e.global.x, y: e.global.y };
     });
     this.container.on('pointertap', () => {
+      if (this.maxSimultaneousPointers > 1) return; // a pinch's finger-lifts, not a real tap
       const now = performance.now();
       if (now - this.lastTapTime < 350) { this.interacted = false; this.fit(); }
       this.lastTapTime = now;
@@ -68,12 +107,43 @@ export class BoardView {
     this.container.on('wheel', (e: FederatedWheelEvent) => {
       e.stopPropagation();
       this.interacted = true;
-      const local = this.container.toLocal(e.global);
-      const before = { x: (local.x - this.world.position.x) / this.world.scale.x, y: (local.y - this.world.position.y) / this.world.scale.y };
       const scale = clampScale(this.world.scale.x * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
-      this.world.scale.set(scale);
-      this.world.position.set(local.x - before.x * scale, local.y - before.y * scale);
+      this.zoomAround(e.global, scale);
     });
+  }
+
+  /** Rescales `world` while keeping the content point under `globalPoint` fixed on screen. */
+  private zoomAround(globalPoint: { x: number; y: number }, scale: number) {
+    const local = this.container.toLocal(globalPoint);
+    const before = {
+      x: (local.x - this.world.position.x) / this.world.scale.x,
+      y: (local.y - this.world.position.y) / this.world.scale.y,
+    };
+    this.world.scale.set(scale);
+    this.world.position.set(local.x - before.x * scale, local.y - before.y * scale);
+  }
+
+  private startPinch() {
+    const [p1, p2] = this.pointers.values();
+    this.pinchStartDistance = Math.max(1, Math.hypot(p1.x - p2.x, p1.y - p2.y));
+    this.pinchStartScale = this.world.scale.x;
+    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    const local = this.container.toLocal(mid);
+    this.pinchAnchor = {
+      x: (local.x - this.world.position.x) / this.world.scale.x,
+      y: (local.y - this.world.position.y) / this.world.scale.y,
+    };
+  }
+
+  private updatePinch() {
+    this.interacted = true;
+    const [p1, p2] = this.pointers.values();
+    const distance = Math.max(1, Math.hypot(p1.x - p2.x, p1.y - p2.y));
+    const scale = clampScale(this.pinchStartScale * (distance / this.pinchStartDistance));
+    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    const local = this.container.toLocal(mid);
+    this.world.scale.set(scale);
+    this.world.position.set(local.x - this.pinchAnchor.x * scale, local.y - this.pinchAnchor.y * scale);
   }
 
   async mount(initialState: GameState) {
