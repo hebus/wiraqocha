@@ -8,7 +8,7 @@ import { BoardView } from '../pixi/BoardView';
 import { DiceTrayView } from '../pixi/DiceTrayView';
 import { ActionPanelView, type InteractionMode } from '../pixi/ActionPanelView';
 import { LogPanelView } from '../pixi/LogPanelView';
-import { COLOR, hint as hintStyle } from '../pixi/theme';
+import { hint as hintStyle } from '../pixi/theme';
 
 const HINTS: Record<InteractionMode, string> = {
   conquer: "Cliquez un territoire libre ou adverse, puis choisissez le pion qui l'attaque.",
@@ -45,7 +45,6 @@ export class GameScene {
   private diceTray: DiceTrayView;
   private actionPanel: ActionPanelView;
   private logPanel: LogPanelView;
-  private aiBanner: Text;
   private hintText: Text;
 
   private mode: InteractionMode = 'conquer';
@@ -74,8 +73,6 @@ export class GameScene {
     }, this.overlayLayer);
     this.logPanel = new LogPanelView();
 
-    this.aiBanner = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 12, fill: COLOR.cyan } });
-    this.aiBanner.anchor.set(0.5, 0);
     this.hintText = new Text({ text: '', style: { ...hintStyle, wordWrap: false, align: 'center' } });
     this.hintText.anchor.set(0.5, 0);
 
@@ -89,7 +86,6 @@ export class GameScene {
       this.logPanel.container,
       this.diceTray.container,
       this.hud.actionContainer,
-      this.aiBanner,
       this.hintText,
       this.overlayLayer,
     );
@@ -238,10 +234,6 @@ export class GameScene {
     this.actionPanel.render(state, this.mode, this.pendingTileId, this.pendingPawnId);
     this.logPanel.render(state.log);
 
-    const activePlayer = state.players.find((p) => p.id === state.activePlayerId)!;
-    const isAITurn = this.isAITurn(state);
-    this.aiBanner.visible = isAITurn;
-    this.aiBanner.text = isAITurn ? `🤖 ${activePlayer.name} réfléchit…` : '';
     this.hintText.text = HINTS[this.mode];
 
     this.repositionDynamicElements();
@@ -253,7 +245,6 @@ export class GameScene {
     const insetLeft = GAP + SIDE_PANEL_WIDTH + GAP;
     const insetRight = LOG_PANEL_WIDTH + GAP * 2;
     const centerX = insetLeft + (this.screenWidth - insetLeft - insetRight) / 2;
-    this.aiBanner.position.set(centerX, HUD_HEIGHT + GAP + 8);
     this.hintText.position.set(centerX, this.screenHeight - 24 - (this.hintText.height || 16));
 
     // Dice tray + turn button, stacked and anchored to the bottom-right corner, unboxed.

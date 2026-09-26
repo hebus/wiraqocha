@@ -113,7 +113,10 @@ export class HudView {
     const y = TOPBAR_HEIGHT + 10;
     const buildCard = (p: (typeof state.players)[number]) => {
       const lev = leviathanProgress(p);
-      return this.buildPlayerCard(p.id, p.name, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length, p.id === state.activePlayerId);
+      return this.buildPlayerCard(
+        p.id, p.name, !!p.isAI, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length,
+        p.id === state.activePlayerId,
+      );
     };
 
     // Players 1-2 grow inward from the left edge (under the action panel column); with 3-4
@@ -161,7 +164,7 @@ export class HudView {
   }
 
   private buildPlayerCard(
-    id: string, name: string, somnium: number, somniumGoal: number, resources: number,
+    id: string, name: string, isAI: boolean, somnium: number, somniumGoal: number, resources: number,
     lev: { resources: number; somnium: number }, leviathanGoal: { resources: number; somnium: number }, artifacts: number,
     isActive: boolean,
   ): Container {
@@ -169,11 +172,13 @@ export class HudView {
     const color = PLAYER_COLOR[id] ?? 0xffffff;
     const cardHeight = PLAYER_STRIP_HEIGHT - 8;
 
+    const namePrefix = isAI ? '🤖 ' : '';
+
     // Split across two lines at full size, rather than one long line shrunk down to fit — a
     // single-line card was wide enough that a second or fourth player's card could spill out over
     // the board.
     const line1 = new Text({
-      text: `${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}`,
+      text: `${namePrefix}${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}`,
       style: { ...body, fontSize: 13 },
     });
     line1.position.set(20, 7);

@@ -196,14 +196,12 @@ export class BoardRenderer {
     c.addChild(terrain);
 
     const owner = tile.ownerId;
-    const frame = new Graphics();
-    frame.poly(hexPoints(this.size * 0.98));
-    frame.stroke({
-      width: owner ? 4 : 2,
-      color: owner ? playerColor[owner] : 0xc9a86a,
-      alpha: owner ? 1 : 0.72,
-    });
-    c.addChild(frame);
+    if (owner) {
+      const frame = new Graphics();
+      frame.poly(hexPoints(this.size * 0.98));
+      frame.stroke({ width: 4, color: playerColor[owner], alpha: 1 });
+      c.addChild(frame);
+    }
 
     // Subtle territory ownership wash.
     if (owner) {
@@ -214,7 +212,8 @@ export class BoardRenderer {
 
 
     // What conquering this tile yields, shown top-center: Resource cubes, the
-    // Somnium Extraction bonus on a Filon, or the extra die from a Village.
+    // Somnium Extraction bonus on a Filon, the extra die from a Village, or the
+    // free reroll from a Temple/Ruines.
     if (interactable) {
       const yieldLabel = tile.resources > 0
         ? `▣ ${tile.resources}`
@@ -222,7 +221,9 @@ export class BoardRenderer {
           ? '💎 ×2'
           : tile.dieBonus > 0
             ? `🎲 +${tile.dieBonus}`
-            : undefined;
+            : tile.terrain === 'ruins'
+              ? '↻'
+              : undefined;
       if (yieldLabel) {
         const yieldY = -this.size * 0.72;
         const yieldText = new Text({
