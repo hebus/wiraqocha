@@ -1,14 +1,16 @@
-import { Container, Text } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import type { GameAction, GameState } from '../game-core/types';
 import { GameEngine } from '../game-core/engine';
 import { chooseNextAction } from '../game-core/ai';
 import { Store } from '../state/store';
+import { loadPreferences, savePreferences, type Preferences } from '../state/preferences';
 import { HudView, HUD_HEIGHT } from '../pixi/HudView';
 import { BoardView } from '../pixi/BoardView';
 import { DiceTrayView } from '../pixi/DiceTrayView';
 import { ActionPanelView, type InteractionMode } from '../pixi/ActionPanelView';
 import { LogPanelView } from '../pixi/LogPanelView';
-import { hint as hintStyle } from '../pixi/theme';
+import { ToggleButton } from '../pixi/ui/ToggleButton';
+import { COLOR, hint as hintStyle } from '../pixi/theme';
 
 const HINTS: Record<InteractionMode, string> = {
   conquer: "Cliquez un territoire libre ou adverse, puis choisissez le pion qui l'attaque.",
@@ -46,6 +48,8 @@ export class GameScene {
   private actionPanel: ActionPanelView;
   private logPanel: LogPanelView;
   private hintText: Text;
+  private preferences: Preferences = loadPreferences();
+  private prefsPanel: Container | null = null;
 
   private mode: InteractionMode = 'conquer';
   private pendingTileId: string | null = null;
@@ -63,6 +67,7 @@ export class GameScene {
       () => this.dispatch({ type: 'ROLL_DICE' }),
       () => { this.dispatch({ type: 'END_TURN' }); this.mode = 'conquer'; this.pendingTileId = null; this.pendingPawnId = null; this.actionPanel.resetError(); this.renderAll(); },
       () => this.onQuit(),
+      () => this.togglePreferencesPanel(),
     );
     this.board = new BoardView((id) => this.onTile(id));
     this.diceTray = new DiceTrayView((a) => this.guardedDispatch(a));
@@ -107,22 +112,75 @@ export class GameScene {
     this.screenHeight = height;
     this.hud.layout(width);
 
-    // Actions on the left, journal on the right — bookending the board, which fits and centers
-    // itself in the gap left between them (the board still covers the full screen, so panning
-    // can slide it under either panel).
-    this.board.layout(0, 0, width, height, GAP + SIDE_PANEL_WIDTH + GAP, LOG_PANEL_WIDTH + GAP * 2);
+    // Actions on the left, journal on the right (when enabled) — bookending the board, which fits
+    // and centers itself in the gap left between them (the board still covers the full screen, so
+    // panning can slide it under either panel). With the journal hidden, the board simply gets the
+    // extra room back.
+    const insetRight = this.preferences.showJournal ? LOG_PANEL_WIDTH + GAP * 2 : GAP;
+    this.board.layout(0, 0, width, height, GAP + SIDE_PANEL_WIDTH + GAP, insetRight);
 
     const sideY = HUD_HEIGHT + GAP;
     const sideHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2);
     this.actionPanel.container.position.set(GAP, sideY);
     this.actionPanel.layout(SIDE_PANEL_WIDTH, sideHeight);
 
-    const rightX = width - LOG_PANEL_WIDTH - GAP;
-    const journalHeight = Math.min(JOURNAL_HEIGHT, sideHeight * 0.6);
-    this.logPanel.container.position.set(rightX, sideY);
-    this.logPanel.layout(LOG_PANEL_WIDTH, journalHeight);
+    this.logPanel.container.visible = this.preferences.showJournal;
+    if (this.preferences.showJournal) {
+      const rightX = width - LOG_PANEL_WIDTH - GAP;
+      const journalHeight = Math.min(JOURNAL_HEIGHT, sideHeight * 0.6);
+      this.logPanel.container.position.set(rightX, sideY);
+      this.logPanel.layout(LOG_PANEL_WIDTH, journalHeight);
+    }
 
     this.renderAll();
+  }
+
+  private togglePreferencesPanel() {
+    if (this.prefsPanel) { this.closePreferencesPanel(); return; }
+    this.openPreferencesPanel();
+  }
+
+  private openPreferencesPanel() {
+    const w = 280;
+    const rowH = 44;
+    const pad = 12;
+    const h = rowH + pad * 2;
+
+    const panel = new Container();
+    panel.position.set(this.screenWidth - 24 - w, 36);
+
+    // Full-screen invisible catcher so a tap anywhere outside the panel closes it.
+    const catcher = new Graphics();
+    catcher.rect(-100000, -100000, 200000, 200000).fill({ color: 0x000000, alpha: 0 });
+    catcher.eventMode = 'static';
+    catcher.on('pointertap', () => this.closePreferencesPanel());
+    panel.addChild(catcher);
+
+    const bg = new Graphics();
+    bg.roundRect(0, 0, w, h, 10).fill({ color: COLOR.panelBgAlt, alpha: 0.98 }).stroke({ width: 1, color: COLOR.gold });
+    panel.addChild(bg);
+
+    const toggle = new ToggleButton({
+      label: "Journal d'expédition", width: w - pad * 2, height: rowH,
+      checked: this.preferences.showJournal, onLabel: 'OUI', offLabel: 'NON',
+      onChange: (checked) => {
+        this.preferences.showJournal = checked;
+        savePreferences(this.preferences);
+        this.layout(this.screenWidth, this.screenHeight);
+      },
+    });
+    toggle.position.set(pad, pad);
+    panel.addChild(toggle);
+
+    this.overlayLayer.addChild(panel);
+    this.prefsPanel = panel;
+  }
+
+  private closePreferencesPanel() {
+    if (!this.prefsPanel) return;
+    this.overlayLayer.removeChild(this.prefsPanel);
+    this.prefsPanel.destroy({ children: true });
+    this.prefsPanel = null;
   }
 
   private setMode(m: InteractionMode) {

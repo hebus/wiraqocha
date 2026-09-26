@@ -23,6 +23,7 @@ export class HudView {
   private resourcesText: Text;
   private playerStrip = new Container();
   private actionButton: Button;
+  private prefsButton: Button;
   private quitButton: Button;
   private victoryBg = new Graphics();
   private victoryText: Text;
@@ -30,7 +31,7 @@ export class HudView {
   private victoryHomeButton: Button;
   private width = 960;
 
-  constructor(private onRoll: () => void, private onEndTurn: () => void, onQuit: () => void) {
+  constructor(private onRoll: () => void, private onEndTurn: () => void, onQuit: () => void, onPreferences: () => void) {
     this.topContainer.addChild(this.topbarBg);
 
     const anchor = new Text({ text: '⚓', style: { fontSize: 22, fill: COLOR.goldBright, dropShadow: TEXT_SHADOW } });
@@ -55,6 +56,12 @@ export class HudView {
     this.resourcesText = new Text({ text: '', style: { ...body, fontSize: 13, dropShadow: TEXT_SHADOW } });
     this.resourcesText.anchor.set(1, 0.5);
     this.topContainer.addChild(this.resourcesText);
+
+    this.prefsButton = new Button({
+      label: '⚙ Préférences', variant: 'secondary', height: 22, fontSize: 10,
+      onClick: () => onPreferences(),
+    });
+    this.topContainer.addChild(this.prefsButton);
 
     this.quitButton = new Button({
       label: 'Quitter', variant: 'secondary', height: 22, fontSize: 10,
@@ -113,6 +120,7 @@ export class HudView {
     this.turnText.position.set(width / 2, TOPBAR_HEIGHT / 2);
     this.resourcesText.position.set(width - 24, TOPBAR_HEIGHT / 2 + 9);
     this.quitButton.position.set(width - 24 - this.quitButton.width2, 6);
+    this.prefsButton.position.set(this.quitButton.x - 8 - this.prefsButton.width2, 6);
   }
 
   render(state: GameState) {
