@@ -1,5 +1,11 @@
 import { Assets, Container, Graphics, Sprite, Text } from 'pixi.js';
+import { OutlineFilter } from 'pixi-filters';
 import type { GameState, PawnType, TileState } from '../game-core/types';
+
+// Shared across every pawn sprite (not recreated per-tile-render) — follows each sprite's
+// actual alpha silhouette, unlike a plain circle/ring, so it works for the pawns' irregular
+// character shapes (hat, backpack, zeppelin fins, etc.).
+const pawnOutline = new OutlineFilter({ thickness: 2, color: 0x333333, quality: 0.4 });
 
 const playerColor: Record<string, number> = {
   albion: 0xb74c32,
@@ -367,6 +373,7 @@ export class BoardRenderer {
     sprite.width = targetWidth;
     sprite.scale.y = sprite.scale.x;
     sprite.position.set(0, type === 'zeppelin' ? 18 : 12);
+    sprite.filters = [pawnOutline];
     parent.addChild(sprite);
 
     const badge = new Graphics();

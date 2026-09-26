@@ -51,6 +51,6 @@ export class GameApp {
   }
 
   private showGameScene(initialState: GameState) {
-    this.mount(new GameScene(new Store<GameState>(initialState)));
+    this.mount(new GameScene(new Store<GameState>(initialState), () => this.showStartScene()));
   }
 }

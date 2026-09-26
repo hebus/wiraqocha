@@ -12,28 +12,25 @@ export const TOPBAR_HEIGHT = 66;
 export const PLAYER_STRIP_HEIGHT = 68;
 export const HUD_HEIGHT = TOPBAR_HEIGHT + PLAYER_STRIP_HEIGHT;
 
-const PHASE_LABEL: Record<GameState['phase'], string> = {
-  preparation: 'PRÉPARATION',
-  actions: 'ACTIONS',
-  finished: 'PARTIE TERMINÉE',
-};
-
 /** Top bar (brand/turn/resources), phase label, player strip, and the turn action button/victory banner. */
 export class HudView {
   readonly topContainer = new Container();
   readonly actionContainer = new Container();
+  readonly victoryContainer = new Container();
 
   private topbarBg = new Graphics();
   private turnText: Text;
   private resourcesText: Text;
-  private phaseText: Text;
   private playerStrip = new Container();
   private actionButton: Button;
+  private quitButton: Button;
   private victoryBg = new Graphics();
   private victoryText: Text;
+  private victorySubText: Text;
+  private victoryHomeButton: Button;
   private width = 960;
 
-  constructor(private onRoll: () => void, private onEndTurn: () => void) {
+  constructor(private onRoll: () => void, private onEndTurn: () => void, onQuit: () => void) {
     this.topContainer.addChild(this.topbarBg);
 
     const anchor = new Text({ text: '⚓', style: { fontSize: 22, fill: COLOR.goldBright, dropShadow: TEXT_SHADOW } });
@@ -59,19 +56,37 @@ export class HudView {
     this.resourcesText.anchor.set(1, 0.5);
     this.topContainer.addChild(this.resourcesText);
 
-    this.phaseText = new Text({ text: '', style: { fontFamily: 'Arial, sans-serif', fontSize: 10, fill: COLOR.cyan, letterSpacing: 2, dropShadow: TEXT_SHADOW } });
-    this.phaseText.position.set(24, TOPBAR_HEIGHT + 4);
-    this.topContainer.addChild(this.phaseText);
+    this.quitButton = new Button({
+      label: 'Quitter', variant: 'secondary', height: 22, fontSize: 10,
+      onClick: () => {
+        if (window.confirm('Quitter la partie en cours ? La progression sera perdue.')) onQuit();
+      },
+    });
+    this.topContainer.addChild(this.quitButton);
 
     this.topContainer.addChild(this.playerStrip);
 
     this.actionButton = new Button({ label: '', width: 220, height: 48, variant: 'primary', onClick: () => this.handleAction() });
     this.actionContainer.addChild(this.actionButton);
 
-    this.actionContainer.addChild(this.victoryBg);
-    this.victoryText = new Text({ text: '', style: { ...body, fontSize: 13, align: 'center' }, });
-    this.victoryText.anchor.set(0.5, 0);
-    this.actionContainer.addChild(this.victoryText);
+    this.victoryContainer.addChild(this.victoryBg);
+    this.victoryText = new Text({
+      text: '',
+      style: { fontFamily: FONT_SERIF, fontSize: 40, fontWeight: '700', fill: COLOR.goldBright, align: 'center', dropShadow: TEXT_SHADOW },
+    });
+    this.victoryText.anchor.set(0.5, 0.5);
+    this.victoryContainer.addChild(this.victoryText);
+
+    this.victorySubText = new Text({
+      text: '', style: { ...body, fontSize: 16, align: 'center', dropShadow: TEXT_SHADOW },
+    });
+    this.victorySubText.anchor.set(0.5, 0.5);
+    this.victoryContainer.addChild(this.victorySubText);
+
+    this.victoryHomeButton = new Button({
+      label: "RETOUR À L'ACCUEIL", variant: 'primary', height: 40, onClick: () => onQuit(),
+    });
+    this.victoryContainer.addChild(this.victoryHomeButton);
   }
 
   private lastPhase: GameState['phase'] | null = null;
@@ -96,7 +111,8 @@ export class HudView {
     });
     this.topbarBg.rect(0, 0, width, TOPBAR_HEIGHT).fill(gradient);
     this.turnText.position.set(width / 2, TOPBAR_HEIGHT / 2);
-    this.resourcesText.position.set(width - 24, TOPBAR_HEIGHT / 2);
+    this.resourcesText.position.set(width - 24, TOPBAR_HEIGHT / 2 + 9);
+    this.quitButton.position.set(width - 24 - this.quitButton.width2, 6);
   }
 
   render(state: GameState) {
@@ -104,7 +120,6 @@ export class HudView {
     this.lastPhase = state.phase;
     this.turnText.text = `TOUR ${state.turn} • ${player.name.toUpperCase()}`;
     this.resourcesText.text = `💎 ${player.somnium}   ▣ ${player.resources}   ⚙ ${player.technologies.length}`;
-    this.phaseText.text = PHASE_LABEL[state.phase];
 
     const somniumGoal = somniumVictoryThreshold(state.players.length);
     const leviathanGoal = leviathanThreshold(state.players.length);
@@ -141,25 +156,36 @@ export class HudView {
 
     if (state.phase === 'preparation') {
       this.actionButton.visible = true;
-      this.victoryBg.visible = false;
-      this.victoryText.visible = false;
+      this.victoryContainer.visible = false;
       this.actionButton.setLabel('🎲 LANCER LES DÉS');
     } else if (state.phase === 'actions') {
       this.actionButton.visible = true;
-      this.victoryBg.visible = false;
-      this.victoryText.visible = false;
+      this.victoryContainer.visible = false;
       this.actionButton.setLabel('FIN DU TOUR');
     } else {
       this.actionButton.visible = false;
-      this.victoryBg.visible = true;
-      this.victoryText.visible = true;
+      this.victoryContainer.visible = true;
       const winner = state.players.find((p) => p.id === state.winner);
-      this.victoryText.text = `🏆 ${winner?.name ?? '?'} remporte la partie` + (state.winMessage ? `\n${state.winMessage}` : '');
-      const w = Math.max(260, this.victoryText.width + 32);
-      const h = this.victoryText.height + 24;
+      this.victoryText.text = `🏆 ${winner?.name ?? '?'} remporte la partie`;
+      this.victorySubText.text = state.winMessage ?? '';
+      this.victorySubText.visible = !!state.winMessage;
+
+      const textGap = state.winMessage ? 14 : 0;
+      const buttonGap = 28;
+      const buttonHeight = this.victoryHomeButton.height2;
+      const stackHeight = this.victoryText.height + textGap + this.victorySubText.height + buttonGap + buttonHeight;
+
+      let y = -stackHeight / 2;
+      this.victoryText.position.set(0, y + this.victoryText.height / 2);
+      y += this.victoryText.height + textGap;
+      this.victorySubText.position.set(0, y + this.victorySubText.height / 2);
+      y += this.victorySubText.height + buttonGap;
+      this.victoryHomeButton.position.set(-this.victoryHomeButton.width2 / 2, y);
+
+      const w = Math.max(420, this.victoryText.width + 64, this.victorySubText.width + 64, this.victoryHomeButton.width2 + 64);
+      const h = stackHeight + 48;
       this.victoryBg.clear();
-      this.victoryBg.roundRect(-w / 2, 0, w, h, 8).fill({ color: 0x173f43, alpha: 0.95 }).stroke({ width: 1, color: COLOR.cyan });
-      this.victoryText.position.set(0, 12);
+      this.victoryBg.roundRect(-w / 2, -h / 2, w, h, 12).fill({ color: 0x173f43, alpha: 0.95 }).stroke({ width: 2, color: COLOR.cyan });
     }
   }
 

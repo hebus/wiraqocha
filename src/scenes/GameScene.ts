@@ -58,10 +58,11 @@ export class GameScene {
   private aiTurnKey: string | null = null;
   private aiTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private store: Store<GameState>) {
+  constructor(private store: Store<GameState>, private onQuit: () => void) {
     this.hud = new HudView(
       () => this.dispatch({ type: 'ROLL_DICE' }),
       () => { this.dispatch({ type: 'END_TURN' }); this.mode = 'conquer'; this.pendingTileId = null; this.pendingPawnId = null; this.actionPanel.resetError(); this.renderAll(); },
+      () => this.onQuit(),
     );
     this.board = new BoardView((id) => this.onTile(id));
     this.diceTray = new DiceTrayView((a) => this.guardedDispatch(a));
@@ -87,6 +88,7 @@ export class GameScene {
       this.diceTray.container,
       this.hud.actionContainer,
       this.hintText,
+      this.hud.victoryContainer,
       this.overlayLayer,
     );
 
@@ -246,6 +248,7 @@ export class GameScene {
     const insetRight = LOG_PANEL_WIDTH + GAP * 2;
     const centerX = insetLeft + (this.screenWidth - insetLeft - insetRight) / 2;
     this.hintText.position.set(centerX, this.screenHeight - 24 - (this.hintText.height || 16));
+    this.hud.victoryContainer.position.set(this.screenWidth / 2, this.screenHeight / 2);
 
     // Dice tray + turn button, stacked and anchored to the bottom-right corner, unboxed.
     const bottomMargin = 28;
