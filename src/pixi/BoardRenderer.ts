@@ -349,7 +349,7 @@ export class BoardRenderer {
     const targetWidth = (type === 'zeppelin' ? 76 : type === 'base-camp' ? 62 : 50) * 1.5;
     sprite.width = targetWidth;
     sprite.scale.y = sprite.scale.x;
-    sprite.position.set(0, type === 'zeppelin' ? -5 : 12);
+    sprite.position.set(0, type === 'zeppelin' ? 18 : 12);
     parent.addChild(sprite);
 
     const badge = new Graphics();
