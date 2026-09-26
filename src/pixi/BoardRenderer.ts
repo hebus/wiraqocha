@@ -203,6 +203,12 @@ export class BoardRenderer {
       c.addChild(frame);
     }
 
+    // Hover feedback ring, independent of ownership — hidden until pointerover.
+    const hover = new Graphics();
+    hover.poly(hexPoints(this.size * 0.98)).stroke({ width: 2, color: 0xc9a86a, alpha: 0.85 });
+    hover.visible = false;
+    c.addChild(hover);
+
     // Subtle territory ownership wash.
     if (owner) {
       const wash = new Graphics();
@@ -271,11 +277,20 @@ export class BoardRenderer {
 
     // Artifact token remains visible until that artifact is actually owned.
     if (tile.artifact && !state.players.some((p) => p.artifacts.includes(tile.artifact!))) {
+      const artifactSize = 31 * 1.5;
+      const artifactPos = { x: -this.size * 0.5 - 5, y: this.size * 0.38 };
+
+      // Black outline behind the token so its silhouette reads clearly against busy terrain art.
+      const artifactOutline = new Graphics();
+      artifactOutline.circle(0, 0, artifactSize / 2 + 2).fill({ color: 0x000000, alpha: 0.9 });
+      artifactOutline.position.set(artifactPos.x, artifactPos.y);
+      c.addChild(artifactOutline);
+
       const artifact = new Sprite(this.texture(tokenAsset[tile.artifact as 1 | 2 | 3 | 4]));
       artifact.anchor.set(0.5);
-      artifact.width = 31;
-      artifact.height = 31;
-      artifact.position.set(-this.size * 0.5, this.size * 0.38);
+      artifact.width = artifactSize;
+      artifact.height = artifactSize;
+      artifact.position.set(artifactPos.x, artifactPos.y);
       c.addChild(artifact);
     }
 
@@ -332,11 +347,12 @@ export class BoardRenderer {
     if (interactable) {
       c.on('pointertap', () => this.onTile(tile.id));
       c.on('pointerover', () => {
-        frame.alpha = 1;
-        frame.scale.set(1.035);
+        hover.visible = true;
+        hover.scale.set(1.035);
       });
       c.on('pointerout', () => {
-        frame.scale.set(1);
+        hover.visible = false;
+        hover.scale.set(1);
       });
     }
 
