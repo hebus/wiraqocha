@@ -4,12 +4,14 @@ import { GameEngine } from '../game-core/engine';
 import { chooseNextAction } from '../game-core/ai';
 import { Store } from '../state/store';
 import { loadPreferences, savePreferences, type Preferences } from '../state/preferences';
-import { HudView, HUD_HEIGHT } from '../pixi/HudView';
+import { saveGame, clearSavedGame } from '../state/savegame';
+import { HudView, hudHeightFor } from '../pixi/HudView';
 import { BoardView } from '../pixi/BoardView';
 import { DiceTrayView } from '../pixi/DiceTrayView';
 import { ActionPanelView, type InteractionMode } from '../pixi/ActionPanelView';
 import { LogPanelView } from '../pixi/LogPanelView';
 import { ToggleButton } from '../pixi/ui/ToggleButton';
+import { Button } from '../pixi/ui/Button';
 import { COLOR, hint as hintStyle } from '../pixi/theme';
 
 const HINTS: Record<InteractionMode, string> = {
@@ -50,6 +52,7 @@ export class GameScene {
   private hintText: Text;
   private preferences: Preferences = loadPreferences();
   private prefsPanel: Container | null = null;
+  private quitConfirmPanel: Container | null = null;
 
   private mode: InteractionMode = 'conquer';
   private pendingTileId: string | null = null;
@@ -66,7 +69,7 @@ export class GameScene {
     this.hud = new HudView(
       () => this.dispatch({ type: 'ROLL_DICE' }),
       () => { this.dispatch({ type: 'END_TURN' }); this.mode = 'conquer'; this.pendingTileId = null; this.pendingPawnId = null; this.actionPanel.resetError(); this.renderAll(); },
-      () => this.onQuit(),
+      () => this.requestQuit(),
       () => this.togglePreferencesPanel(),
     );
     this.board = new BoardView((id) => this.onTile(id));
@@ -100,11 +103,15 @@ export class GameScene {
     this.store.subscribe((state) => {
       this.renderAll();
       this.scheduleAiTickIfNeeded(state);
+      // Autosave on every change — a finished game has nothing left to resume, so its save is
+      // cleared instead (otherwise the start screen would offer to "continue" a won game).
+      if (state.phase === 'finished') clearSavedGame(); else saveGame(state);
     });
 
     this.layout(window.innerWidth, window.innerHeight);
     this.board.mount(this.store.state).then(() => this.renderAll());
     this.scheduleAiTickIfNeeded(this.store.state);
+    saveGame(this.store.state);
   }
 
   layout(width: number, height: number) {
@@ -119,8 +126,9 @@ export class GameScene {
     const insetRight = this.preferences.showJournal ? LOG_PANEL_WIDTH + GAP * 2 : GAP;
     this.board.layout(0, 0, width, height, GAP + SIDE_PANEL_WIDTH + GAP, insetRight);
 
-    const sideY = HUD_HEIGHT + GAP;
-    const sideHeight = Math.max(200, height - HUD_HEIGHT - GAP * 2);
+    const hudHeight = hudHeightFor(this.store.state.players.length);
+    const sideY = hudHeight + GAP;
+    const sideHeight = Math.max(200, height - hudHeight - GAP * 2);
     this.actionPanel.container.position.set(GAP, sideY);
     this.actionPanel.layout(SIDE_PANEL_WIDTH, sideHeight);
 
@@ -136,6 +144,7 @@ export class GameScene {
   }
 
   private togglePreferencesPanel() {
+    this.closeQuitConfirmPanel();
     if (this.prefsPanel) { this.closePreferencesPanel(); return; }
     this.openPreferencesPanel();
   }
@@ -181,6 +190,73 @@ export class GameScene {
     this.overlayLayer.removeChild(this.prefsPanel);
     this.prefsPanel.destroy({ children: true });
     this.prefsPanel = null;
+  }
+
+  // The victory screen's own "retour à l'accueil" already means the game is over — nothing to
+  // lose — so it skips straight to onQuit(); only leaving a game still in progress needs this.
+  private requestQuit() {
+    if (this.store.state.phase === 'finished') { this.onQuit(); return; }
+    this.closePreferencesPanel();
+    if (this.quitConfirmPanel) return;
+    this.openQuitConfirmPanel();
+  }
+
+  private openQuitConfirmPanel() {
+    const w = 380;
+    const pad = 20;
+    const buttonGap = 12;
+    const buttonHeight = 40;
+
+    const panel = new Container();
+
+    // Full-screen dimmed catcher so a tap outside the dialog dismisses it, same as "cancel".
+    const catcher = new Graphics();
+    catcher.rect(-100000, -100000, 200000, 200000).fill({ color: 0x000000, alpha: 0.5 });
+    catcher.eventMode = 'static';
+    catcher.on('pointertap', () => this.closeQuitConfirmPanel());
+    panel.addChild(catcher);
+
+    const message = new Text({
+      text: "Quitter la partie en cours ? Elle est sauvegardée : vous pourrez la reprendre depuis l'accueil.",
+      style: { ...hintStyle, fill: COLOR.text, fontSize: 13, wordWrapWidth: w - pad * 2, align: 'center' },
+    });
+    message.anchor.set(0.5, 0);
+
+    const buttonWidth = (w - pad * 2 - buttonGap) / 2;
+    const cancelBtn = new Button({
+      label: 'Annuler', width: buttonWidth, height: buttonHeight, variant: 'secondary',
+      onClick: () => this.closeQuitConfirmPanel(),
+    });
+    const confirmBtn = new Button({
+      label: 'Quitter la partie', width: buttonWidth, height: buttonHeight, variant: 'primary',
+      onClick: () => { this.closeQuitConfirmPanel(); this.onQuit(); },
+    });
+
+    const buttonsY = pad + message.height + pad;
+    const h = buttonsY + buttonHeight + pad;
+    const x = (this.screenWidth - w) / 2;
+    const y = (this.screenHeight - h) / 2;
+
+    const bg = new Graphics();
+    bg.roundRect(x, y, w, h, 12).fill({ color: COLOR.panelBgAlt, alpha: 0.98 }).stroke({ width: 1, color: COLOR.gold });
+    panel.addChild(bg);
+
+    message.position.set(x + w / 2, y + pad);
+    panel.addChild(message);
+
+    cancelBtn.position.set(x + pad, y + buttonsY);
+    confirmBtn.position.set(x + pad + buttonWidth + buttonGap, y + buttonsY);
+    panel.addChild(cancelBtn, confirmBtn);
+
+    this.overlayLayer.addChild(panel);
+    this.quitConfirmPanel = panel;
+  }
+
+  private closeQuitConfirmPanel() {
+    if (!this.quitConfirmPanel) return;
+    this.overlayLayer.removeChild(this.quitConfirmPanel);
+    this.quitConfirmPanel.destroy({ children: true });
+    this.quitConfirmPanel = null;
   }
 
   private setMode(m: InteractionMode) {

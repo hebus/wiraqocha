@@ -12,6 +12,18 @@ export const TOPBAR_HEIGHT = 66;
 export const PLAYER_STRIP_HEIGHT = 68;
 export const HUD_HEIGHT = TOPBAR_HEIGHT + PLAYER_STRIP_HEIGHT;
 
+// With exactly 4 players, every card is clustered top-left as a 2×2 grid (see render()) instead
+// of spreading 2 left / 2 right on one line, so the strip needs a second card row's worth of height.
+const PLAYER_CARD_HEIGHT = PLAYER_STRIP_HEIGHT - 8;
+const PLAYER_ROW_GAP = 8;
+export const HUD_HEIGHT_4P = TOPBAR_HEIGHT + 10 + PLAYER_CARD_HEIGHT * 2 + PLAYER_ROW_GAP;
+
+/** Total HUD height for a given player count — callers use this instead of the fixed
+ * `HUD_HEIGHT` so the 4-player 2-row strip gets the extra vertical room it needs. */
+export function hudHeightFor(playerCount: number) {
+  return playerCount === 4 ? HUD_HEIGHT_4P : HUD_HEIGHT;
+}
+
 /** Top bar (brand/turn/resources), phase label, player strip, and the turn action button/victory banner. */
 export class HudView {
   readonly topContainer = new Container();
@@ -65,9 +77,7 @@ export class HudView {
 
     this.quitButton = new Button({
       label: 'Quitter', variant: 'secondary', height: 22, fontSize: 10,
-      onClick: () => {
-        if (window.confirm('Quitter la partie en cours ? La progression sera perdue.')) onQuit();
-      },
+      onClick: () => onQuit(),
     });
     this.topContainer.addChild(this.quitButton);
 
@@ -134,32 +144,64 @@ export class HudView {
 
     this.playerStrip.removeChildren();
     const y = TOPBAR_HEIGHT + 10;
+
+    // Every card shares one uniform width (the widest player's natural content width) instead of
+    // each shrink-wrapping its own text, so cards line up evenly regardless of name length.
+    const measureWidth = (p: (typeof state.players)[number]) => {
+      const lev = leviathanProgress(p);
+      const [line1Str, line2Str] = this.playerCardLines(
+        p.name, !!p.isAI, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length,
+      );
+      const t1 = new Text({ text: line1Str, style: { ...body, fontSize: 13 } });
+      const t2 = new Text({ text: line2Str, style: { ...body, fontSize: 13 } });
+      const w = Math.max(t1.width, t2.width) + 32;
+      t1.destroy();
+      t2.destroy();
+      return w;
+    };
+    const cardWidth = Math.max(...state.players.map(measureWidth));
+
     const buildCard = (p: (typeof state.players)[number]) => {
       const lev = leviathanProgress(p);
       return this.buildPlayerCard(
         p.id, p.name, !!p.isAI, p.somnium, somniumGoal, p.resources, lev, leviathanGoal, p.artifacts.length,
-        p.id === state.activePlayerId,
+        p.id === state.activePlayerId, cardWidth,
       );
     };
 
-    // Players 1-2 grow inward from the left edge (under the action panel column); with 3-4
-    // players, 3-4 grow inward from the right edge (under the journal column) instead of
-    // continuing rightward into the board, which is what pushed them over it before.
-    let x = 24;
-    for (const p of state.players.slice(0, 2)) {
-      const card = buildCard(p);
-      card.position.set(x, y);
-      this.playerStrip.addChild(card);
-      x += card.getLocalBounds().width + 8;
-    }
+    if (state.players.length === 4) {
+      // All 4 cards cluster top-left as a 2×2 grid instead of spreading across the top — see
+      // hudHeightFor(), which grows the HUD (and shrinks the action panel below it) to fit the
+      // extra row.
+      for (let row = 0; row < 2; row++) {
+        let x = 24;
+        for (const p of state.players.slice(row * 2, row * 2 + 2)) {
+          const card = buildCard(p);
+          card.position.set(x, y + row * (PLAYER_CARD_HEIGHT + PLAYER_ROW_GAP));
+          this.playerStrip.addChild(card);
+          x += cardWidth + 8;
+        }
+      }
+    } else {
+      // Players 1-2 grow inward from the left edge (under the action panel column); a 3rd player
+      // grows inward from the right edge (under the journal column) instead of continuing
+      // rightward into the board, which is what pushed it over it before. All fit on one line.
+      let x = 24;
+      for (const p of state.players.slice(0, 2)) {
+        const card = buildCard(p);
+        card.position.set(x, y);
+        this.playerStrip.addChild(card);
+        x += cardWidth + 8;
+      }
 
-    let rx = this.width - 24;
-    for (const p of [...state.players.slice(2)].reverse()) {
-      const card = buildCard(p);
-      rx -= card.getLocalBounds().width;
-      card.position.set(rx, y);
-      this.playerStrip.addChild(card);
-      rx -= 8;
+      let rx = this.width - 24;
+      for (const p of [...state.players.slice(2)].reverse()) {
+        const card = buildCard(p);
+        rx -= cardWidth;
+        card.position.set(rx, y);
+        this.playerStrip.addChild(card);
+        rx -= 8;
+      }
     }
 
     if (state.phase === 'preparation') {
@@ -197,32 +239,38 @@ export class HudView {
     }
   }
 
+  /** The two lines of card text, factored out so measurement (uniform card width) and the
+   * actual card build always agree on exactly what will be rendered. */
+  private playerCardLines(
+    name: string, isAI: boolean, somnium: number, somniumGoal: number, resources: number,
+    lev: { resources: number; somnium: number }, leviathanGoal: { resources: number; somnium: number }, artifacts: number,
+  ): [string, string] {
+    const namePrefix = isAI ? '🤖 ' : '';
+    return [
+      `${namePrefix}${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}`,
+      `🏛 ${lev.resources}/${leviathanGoal.resources}·${lev.somnium}/${leviathanGoal.somnium}   ☠ ${artifacts}/4`,
+    ];
+  }
+
   private buildPlayerCard(
     id: string, name: string, isAI: boolean, somnium: number, somniumGoal: number, resources: number,
     lev: { resources: number; somnium: number }, leviathanGoal: { resources: number; somnium: number }, artifacts: number,
-    isActive: boolean,
+    isActive: boolean, width: number,
   ): Container {
     const c = new Container();
     const color = PLAYER_COLOR[id] ?? 0xffffff;
     const cardHeight = PLAYER_STRIP_HEIGHT - 8;
 
-    const namePrefix = isAI ? '🤖 ' : '';
+    const [line1Str, line2Str] = this.playerCardLines(name, isAI, somnium, somniumGoal, resources, lev, leviathanGoal, artifacts);
 
     // Split across two lines at full size, rather than one long line shrunk down to fit — a
     // single-line card was wide enough that a second or fourth player's card could spill out over
     // the board.
-    const line1 = new Text({
-      text: `${namePrefix}${name}   💎 ${somnium}/${somniumGoal}   ▣ ${resources}`,
-      style: { ...body, fontSize: 13 },
-    });
+    const line1 = new Text({ text: line1Str, style: { ...body, fontSize: 13 } });
     line1.position.set(20, 7);
-    const line2 = new Text({
-      text: `🏛 ${lev.resources}/${leviathanGoal.resources}·${lev.somnium}/${leviathanGoal.somnium}   ☠ ${artifacts}/4`,
-      style: { ...body, fontSize: 13 },
-    });
+    const line2 = new Text({ text: line2Str, style: { ...body, fontSize: 13 } });
     line2.position.set(20, 7 + line1.height + 2);
 
-    const width = Math.max(line1.width, line2.width) + 32;
     const bg = new Graphics();
     bg.roundRect(0, 0, width, cardHeight, 8)
       .fill({ color: COLOR.panelBg, alpha: 0.9 })

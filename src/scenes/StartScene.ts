@@ -9,17 +9,20 @@ const OPTIONS: Array<{ count: 2 | 3 | 4; label: string }> = [
 ];
 
 const CARD_WIDTH = 420;
-const CARD_HEIGHT = 420;
+const BASE_CARD_HEIGHT = 420;
+const CONTINUE_BLOCK_HEIGHT = 76;
 
 /** Player-count picker — first screen of the game. */
 export class StartScene {
   readonly container = new Container();
   private card = new Container();
   private cardBg = new Graphics();
+  private cardHeight: number;
 
-  constructor(onStart: (count: 2 | 3 | 4) => void) {
+  constructor(onStart: (count: 2 | 3 | 4) => void, onContinue?: () => void) {
+    this.cardHeight = BASE_CARD_HEIGHT + (onContinue ? CONTINUE_BLOCK_HEIGHT : 0);
     this.card.addChild(this.cardBg);
-    this.cardBg.roundRect(0, 0, CARD_WIDTH, CARD_HEIGHT, 16)
+    this.cardBg.roundRect(0, 0, CARD_WIDTH, this.cardHeight, 16)
       .fill({ color: COLOR.panelBgAlt, alpha: 0.96 })
       .stroke({ width: 1, color: COLOR.panelBorder });
 
@@ -38,12 +41,32 @@ export class StartScene {
     subtitle.position.set(CARD_WIDTH / 2, 130);
     this.card.addChild(subtitle);
 
-    const heading = new Text({ text: 'NOMBRE DE JOUEURS', style: { fontFamily: FONT_SERIF, fontSize: 13, fontWeight: '700', fill: COLOR.gold, letterSpacing: 2 } });
+    let headingY = 172;
+    if (onContinue) {
+      const continueButton = new Button({
+        label: '▶ CONTINUER LA PARTIE', width: CARD_WIDTH - 64, height: 52, variant: 'primary',
+        onClick: onContinue,
+      });
+      continueButton.position.set(32, headingY);
+      this.card.addChild(continueButton);
+
+      const continueHint = new Text({
+        text: 'Une partie sauvegardée automatiquement vous attend.',
+        style: { ...hint, wordWrapWidth: CARD_WIDTH - 64, align: 'center' },
+      });
+      continueHint.anchor.set(0.5, 0);
+      continueHint.position.set(CARD_WIDTH / 2, headingY + 58);
+      this.card.addChild(continueHint);
+
+      headingY += CONTINUE_BLOCK_HEIGHT;
+    }
+
+    const heading = new Text({ text: 'NOUVELLE PARTIE — NOMBRE DE JOUEURS', style: { fontFamily: FONT_SERIF, fontSize: 13, fontWeight: '700', fill: COLOR.gold, letterSpacing: 2 } });
     heading.anchor.set(0.5, 0);
-    heading.position.set(CARD_WIDTH / 2, 172);
+    heading.position.set(CARD_WIDTH / 2, headingY);
     this.card.addChild(heading);
 
-    let y = 210;
+    let y = headingY + 38;
     for (const opt of OPTIONS) {
       const button = new Button({ label: opt.label, width: CARD_WIDTH - 64, height: 52, variant: 'primary', onClick: () => onStart(opt.count) });
       button.position.set(32, y);
@@ -64,7 +87,7 @@ export class StartScene {
   }
 
   layout(width: number, height: number) {
-    this.card.position.set((width - CARD_WIDTH) / 2, (height - CARD_HEIGHT) / 2);
+    this.card.position.set((width - CARD_WIDTH) / 2, (height - this.cardHeight) / 2);
   }
 
   destroy() {

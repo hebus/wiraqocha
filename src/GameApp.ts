@@ -5,6 +5,7 @@ import { GameScene } from './scenes/GameScene';
 import { generateBoard } from './game-data/board';
 import { createInitialState } from './game-core/engine';
 import { Store } from './state/store';
+import { hasSavedGame, loadGame } from './state/savegame';
 import type { GameState, PlayerId } from './game-core/types';
 
 interface Scene {
@@ -37,10 +38,18 @@ export class GameApp {
   }
 
   private showStartScene() {
-    this.mount(new StartScene((count) => {
-      this.playerCount = count;
-      this.showAISetupScene();
-    }));
+    this.mount(new StartScene(
+      (count) => {
+        this.playerCount = count;
+        this.showAISetupScene();
+      },
+      hasSavedGame() ? () => this.continueSavedGame() : undefined,
+    ));
+  }
+
+  private continueSavedGame() {
+    const saved = loadGame();
+    if (saved) this.showGameScene(saved);
   }
 
   private showAISetupScene() {
