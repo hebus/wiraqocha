@@ -32,7 +32,6 @@ export class HudView {
 
   private topbarBg = new Graphics();
   private turnText: Text;
-  private resourcesText: Text;
   private playerStrip = new Container();
   private actionButton: Button;
   private prefsButton: Button;
@@ -64,10 +63,6 @@ export class HudView {
     this.turnText = new Text({ text: '', style: { fontFamily: FONT_SERIF, fontSize: 13, fill: COLOR.text, letterSpacing: 1, dropShadow: TEXT_SHADOW } });
     this.turnText.anchor.set(0.5, 0.5);
     this.topContainer.addChild(this.turnText);
-
-    this.resourcesText = new Text({ text: '', style: { ...body, fontSize: 13, dropShadow: TEXT_SHADOW } });
-    this.resourcesText.anchor.set(1, 0.5);
-    this.topContainer.addChild(this.resourcesText);
 
     this.prefsButton = new Button({
       label: '⚙ Préférences', variant: 'secondary', height: 22, fontSize: 10,
@@ -128,7 +123,6 @@ export class HudView {
     });
     this.topbarBg.rect(0, 0, width, TOPBAR_HEIGHT).fill(gradient);
     this.turnText.position.set(width / 2, TOPBAR_HEIGHT / 2);
-    this.resourcesText.position.set(width - 24, TOPBAR_HEIGHT / 2 + 9);
     this.quitButton.position.set(width - 24 - this.quitButton.width2, 6);
     this.prefsButton.position.set(this.quitButton.x - 8 - this.prefsButton.width2, 6);
   }
@@ -137,7 +131,6 @@ export class HudView {
     const player = state.players.find((p) => p.id === state.activePlayerId)!;
     this.lastPhase = state.phase;
     this.turnText.text = `TOUR ${state.turn} • ${player.name.toUpperCase()}`;
-    this.resourcesText.text = `💎 ${player.somnium}   ▣ ${player.resources}   ⚙ ${player.technologies.length}`;
 
     const somniumGoal = somniumVictoryThreshold(state.players.length);
     const leviathanGoal = leviathanThreshold(state.players.length);
