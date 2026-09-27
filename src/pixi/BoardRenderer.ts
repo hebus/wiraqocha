@@ -71,29 +71,40 @@ const somniumTerrainAsset = {
 // tiles need no rotation: row 0 (top, under the Cimetière) has 3 tiles, rows
 // 1-3 have 5 tiles each, and row 4 (bottom) has 4 tiles split 2-and-2 around
 // an empty center slot.
-// The dedicated Village/Ruines/Filon/Cimetière art is a pointy-top hex whose
-// painted border touches the canvas edges exactly (1008×1043px, no padding),
-// so its width:height ratio pins down its true proportions precisely.
-const BORDERED_ART_ASPECT = 1008 / 1043;
+// Every terrain art asset (plain ground, Village/Ruines/Filon/Cimetière) is a
+// pointy-top hex whose painted border touches the canvas edges exactly
+// (941×1031px, no padding), so its width:height ratio pins down its true
+// proportions precisely — used both to size the terrain sprite and (before
+// the gap below) to space out the grid so tiles would interlock edge-to-edge.
+const ART_ASPECT = 941 / 1031;
 
-// The horizontal spacing factor is intentionally larger than the "true" hex
-// value (sqrt(3) ≈ 1.732) — terrain art is drawn oversized so organic
-// Jungle/Montagne photos fully bleed into the tile with no gaps, and at the
-// true spacing that oversized art (and the bordered art above, sized to
-// height = 2×size) overlaps visibly into neighboring tiles. Widening the
-// spacing to comfortably clear that art's width removes the overlap; the
-// vertical (row) spacing doesn't have the same issue.
-const HORIZONTAL_SPACING = 2.0;
+// Standard pointy-top axial spacing (x-step sqrt(3), y-step 1.5, in circumradius
+// units) scaled horizontally to the art's actual (non-regular) aspect ratio —
+// an affine stretch of a regular hex tiling still tiles perfectly.
+const HORIZONTAL_SPACING = 2 * ART_ASPECT;
+
+// Pulls tile centers slightly further apart than an exact edge-to-edge fit,
+// opening up a thin gap between neighboring tiles (a deliberate look, not a
+// sizing artifact) — applies to both axes so the gap reads evenly all around
+// each hex, not just left/right.
+const TILE_GAP = 1.03;
 
 function axialToPixel(q: number, r: number, size: number) {
-  return { x: size * HORIZONTAL_SPACING * (q + r / 2), y: size * 1.5 * r };
+  return {
+    x: size * HORIZONTAL_SPACING * TILE_GAP * (q + r / 2),
+    y: size * 1.5 * TILE_GAP * r,
+  };
 }
 
+// Vertices of a pointy-top hex stretched horizontally to ART_ASPECT (height
+// stays 2×size, width becomes 2×size×ART_ASPECT) so every hex-shaped overlay
+// (outline, frame, hover ring, selection) traces the same shape as the art.
 function hexPoints(size: number) {
+  const xScale = size * ((2 * ART_ASPECT) / Math.sqrt(3));
   const pts: number[] = [];
   for (let i = 0; i < 6; i++) {
     const a = (Math.PI / 180) * (30 + i * 60);
-    pts.push(Math.cos(a) * size, Math.sin(a) * size);
+    pts.push(Math.cos(a) * xScale, Math.sin(a) * size);
   }
   return pts;
 }
@@ -139,10 +150,42 @@ export class BoardRenderer {
 
     for (const tile of state.tiles) this.drawTile(tile, state);
 
+    // Artifact tokens ("crânes") are drawn last, each in its own top-level container on top
+    // of every tile — otherwise a neighboring tile's own container (art, border) can render
+    // over this one's token, since tiles aren't drawn in adjacency order.
+    for (const tile of state.tiles) {
+      if (tile.artifact && !state.players.some((p) => p.artifacts.includes(tile.artifact!))) {
+        this.drawArtifactOverlay(tile);
+      }
+    }
+
     // Drawn last (its own top-level container, on top of every tile) so a neighboring tile's
     // oversized art can never visually cover the selection highlight, regardless of draw order.
     const selectedTile = selectedTileId ? state.tiles.find((t) => t.id === selectedTileId) : undefined;
     if (selectedTile) this.drawSelectionOverlay(selectedTile);
+  }
+
+  private drawArtifactOverlay(tile: TileState) {
+    const overlay = new Container();
+    const p = axialToPixel(tile.q, tile.r, this.size);
+    const artifactSize = 31 * 1.5;
+    const artifactPos = { x: p.x - this.size * 0.5 - 5, y: p.y + this.size * 0.38 };
+    overlay.eventMode = 'none';
+
+    // Black outline behind the token so its silhouette reads clearly against busy terrain art.
+    const artifactOutline = new Graphics();
+    artifactOutline.circle(0, 0, artifactSize / 2 + 2).fill({ color: 0x000000, alpha: 0.9 });
+    artifactOutline.position.set(artifactPos.x, artifactPos.y);
+    overlay.addChild(artifactOutline);
+
+    const artifact = new Sprite(this.texture(tokenAsset[tile.artifact as 1 | 2 | 3 | 4]));
+    artifact.anchor.set(0.5);
+    artifact.width = artifactSize;
+    artifact.height = artifactSize;
+    artifact.position.set(artifactPos.x, artifactPos.y);
+    overlay.addChild(artifact);
+
+    this.container.addChild(overlay);
   }
 
   private drawSelectionOverlay(tile: TileState) {
@@ -178,7 +221,9 @@ export class BoardRenderer {
     c.cursor = interactable ? 'pointer' : 'default';
 
     const outline = new Graphics();
-    outline.poly(hexPoints(this.size + 2)).fill({ color: 0x05090c, alpha: 0.55 });
+    outline.poly(hexPoints(this.size + 2))
+      .fill({ color: 0x05090c, alpha: 0.55 })
+      .stroke({ width: 3, color: 0xc9a86a, alpha: 0.85 });
     c.addChild(outline);
 
     // Villages, Temples (Ruines) and Filons de Somnium each have their own
@@ -193,17 +238,10 @@ export class BoardRenderer {
           : terrainAsset[tile.terrain];
     const terrain = new Sprite(this.texture(terrainTexturePath));
     terrain.anchor.set(0.5);
-    const hasBorderedArt = tile.terrain === 'village' || tile.terrain === 'ruins'
-      || tile.terrain === 'somnium-vein' || tile.terrain === 'machine-cemetery';
-    if (hasBorderedArt) {
-      // Sized from the art's own true proportions (see BORDERED_ART_ASPECT)
-      // instead of forcing a square, so it isn't stretched.
-      terrain.height = this.size * 2;
-      terrain.width = terrain.height * BORDERED_ART_ASPECT;
-    } else {
-      terrain.width = this.size * 1.92;
-      terrain.height = this.size * 1.92;
-    }
+    // Sized from the art's own true proportions (see ART_ASPECT) instead of
+    // forcing a square, so it isn't stretched and interlocks with neighbors.
+    terrain.height = this.size * 2;
+    terrain.width = terrain.height * ART_ASPECT;
     c.addChild(terrain);
 
     const owner = tile.ownerId;
@@ -287,24 +325,6 @@ export class BoardRenderer {
     }
 
     // Artifact token remains visible until that artifact is actually owned.
-    if (tile.artifact && !state.players.some((p) => p.artifacts.includes(tile.artifact!))) {
-      const artifactSize = 31 * 1.5;
-      const artifactPos = { x: -this.size * 0.5 - 5, y: this.size * 0.38 };
-
-      // Black outline behind the token so its silhouette reads clearly against busy terrain art.
-      const artifactOutline = new Graphics();
-      artifactOutline.circle(0, 0, artifactSize / 2 + 2).fill({ color: 0x000000, alpha: 0.9 });
-      artifactOutline.position.set(artifactPos.x, artifactPos.y);
-      c.addChild(artifactOutline);
-
-      const artifact = new Sprite(this.texture(tokenAsset[tile.artifact as 1 | 2 | 3 | 4]));
-      artifact.anchor.set(0.5);
-      artifact.width = artifactSize;
-      artifact.height = artifactSize;
-      artifact.position.set(artifactPos.x, artifactPos.y);
-      c.addChild(artifact);
-    }
-
     if (pawn) this.drawPawn(c, pawn.type, pawn.ownerId);
 
     // Conquest value — a straight number, or the exact dice combination required
